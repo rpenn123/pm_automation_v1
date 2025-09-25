@@ -350,32 +350,39 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     // --- End Robust Handling ---
 
     try {
+        if (chartData.length === 0) {
+            Logger.log("No data available for charting.");
+            return;
+        }
         tempSheet.getRange(1, 1, chartData.length, 4).setValues(chartData);
 
         const createChart = (title, dataRange, seriesColors) => {
-            const builder = sheet.newChart()
-                .setChartType(Charts.ChartType.COLUMN)
-                .addRange(dataRange)
-                .setOption('title', title)
-                .setOption('width', DC.CHART_WIDTH)
-                .setOption('height', DC.CHART_HEIGHT)
-                .setOption('colors', seriesColors)
-                .setOption('legend', { position: 'top' })
-                .asColumnChart();
-            return builder.build();
+            return sheet.newChart()
+                .setChartType(Charts.ChartType.COLUMN).addRange(dataRange)
+                .setOption('title', title).setOption('width', DC.CHART_WIDTH)
+                .setOption('height', DC.CHART_HEIGHT).setOption('colors', seriesColors)
+                .setOption('legend', { position: 'top' }).asColumnChart().build();
         };
 
         // Past 3 Months Trend
-        const pastDataRange = tempSheet.getRange(1, 1, DC.PAST_MONTHS_COUNT, 4);
-        const pastChart = createChart('Past 3 Months: Overdue vs. Total', pastDataRange, [DF.overdue, DF.total]);
+        if (chartData.length >= DC.PAST_MONTHS_COUNT) {
+            const pastDataRange = tempSheet.getRange(1, 1, DC.PAST_MONTHS_COUNT, 4);
+            const pastChart = createChart('Past 3 Months: Overdue vs. Total', pastDataRange, [DF.overdue, DF.total]);
+            sheet.insertChart(pastChart);
+        } else {
+            Logger.log(`Skipping 'Past 3 Months' chart due to insufficient data. Required: ${DC.PAST_MONTHS_COUNT}, Available: ${chartData.length}`);
+        }
 
         // Upcoming 6 Months Trend
-        const upcomingDataRange = tempSheet.getRange(DC.PAST_MONTHS_COUNT + 1, 1, DC.UPCOMING_MONTHS_COUNT, 4);
-        const upcomingChart = createChart('Next 6 Months: Upcoming vs. Total', upcomingDataRange, [DF.upcoming, DF.total]);
-
-        sheet.insertChart(pastChart);
-        sheet.insertChart(upcomingChart);
-
+        const upcomingChartStartRow = DC.PAST_MONTHS_COUNT + 1;
+        const requiredRowsForUpcoming = upcomingChartStartRow + DC.UPCOMING_MONTHS_COUNT - 1;
+        if (chartData.length >= requiredRowsForUpcoming) {
+            const upcomingDataRange = tempSheet.getRange(upcomingChartStartRow, 1, DC.UPCOMING_MONTHS_COUNT, 4);
+            const upcomingChart = createChart('Next 6 Months: Upcoming vs. Total', upcomingDataRange, [DF.upcoming, DF.total]);
+            sheet.insertChart(upcomingChart);
+        } else {
+            Logger.log(`Skipping 'Next 6 Months' chart due to insufficient data. Required total months: ${requiredRowsForUpcoming}, Available: ${chartData.length}`);
+        }
     } finally {
         // --- Cleanup ---
         // Ensure the temporary sheet is always deleted, even if chart creation fails.
