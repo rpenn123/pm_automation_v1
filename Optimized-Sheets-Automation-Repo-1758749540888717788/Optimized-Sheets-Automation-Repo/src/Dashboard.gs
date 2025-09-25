@@ -296,11 +296,11 @@ function applyDashboardFormatting(sheet, numDataRows) {
   const DF = CONFIG.DASHBOARD_FORMATTING;
   const dataRange = sheet.getRange(2, 1, numDataRows, 5);
 
-  // Apply and configure banding
-  const banding = dataRange.applyRowBanding(); // Apply default banding theme
-  banding.setHeaderRow(null); // No header color from banding
-  banding.setFirstRowColor(DF.BANDING_COLOR_ODD);
-  banding.setSecondRowColor(DF.BANDING_COLOR_EVEN);
+  // Apply banding
+  dataRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY)
+           .setHeaderRow(null) // No header color from banding
+           .setFirstRowColor(DF.BANDING_COLOR_ODD)
+           .setSecondRowColor(DF.BANDING_COLOR_EVEN);
 
   // Center align all data
   sheet.getRange(2, 1, numDataRows, DL.GT_APPROVED_COL).setHorizontalAlignment("center");
