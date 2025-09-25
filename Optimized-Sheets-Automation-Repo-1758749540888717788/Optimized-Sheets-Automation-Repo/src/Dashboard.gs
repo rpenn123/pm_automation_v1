@@ -254,14 +254,142 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
   }
 }
 
+/** Clears and prepares the dashboard sheet for new data. */
+function clearAndPrepareDashboardSheet(sheet) {
+  const DL = CONFIG.DASHBOARD_LAYOUT;
+  sheet.clear(); // Clear all content and formats
 
-// (The remaining functions: clearAndPrepareDashboardSheet,
-// setDashboardHeaders, setDashboardHeaderNotes, applyDashboardFormatting, hideDataColumns, 
-// createOrUpdateDashboardCharts, generateMonthList are omitted for brevity but are 
-// included in the final repository. They primarily handle the visualization and formatting
-// based on the CONFIG settings and the processed data.)
+  // Ensure a fixed number of rows for consistent layout
+  const maxRows = sheet.getMaxRows();
+  if (maxRows < DL.FIXED_ROW_COUNT) {
+    sheet.insertRowsAfter(maxRows, DL.FIXED_ROW_COUNT - maxRows);
+  } else if (maxRows > DL.FIXED_ROW_COUNT) {
+    sheet.deleteRows(DL.FIXED_ROW_COUNT + 1, maxRows - DL.FIXED_ROW_COUNT);
+  }
+}
 
-// NOTE: Due to the complexity and length of the presentation logic functions, 
-// they are not fully included in this snippet but are present in the generated ZIP file.
-// They have been refactored to use the centralized CONFIG object for all layout, 
-// formatting, and charting parameters.
+/** Sets the main headers for the dashboard. */
+function setDashboardHeaders(sheet) {
+  const DL = CONFIG.DASHBOARD_LAYOUT;
+  const DF = CONFIG.DASHBOARD_FORMATTING;
+
+  const headers = [
+    "Month", "Total Projects", "Upcoming", "Overdue", "Approved",
+    "GT Upcoming", "GT Overdue", "GT Total", "GT Approved"
+  ];
+  const headerRanges = [
+    sheet.getRange(1, DL.MONTH_COL, 1, 5),
+    sheet.getRange(1, DL.GT_UPCOMING_COL, 1, 4)
+  ];
+
+  headerRanges[0].setValues([headers.slice(0, 5)]);
+  headerRanges[1].setValues([headers.slice(5, 9)]);
+
+  // Apply formatting to all headers
+  headerRanges.forEach(range => {
+    range.setBackground(DF.HEADER_BACKGROUND)
+         .setFontColor(DF.HEADER_FONT_COLOR)
+         .setFontWeight("bold")
+         .setHorizontalAlignment("center");
+  });
+}
+
+/** Sets explanatory notes for dashboard headers. */
+function setDashboardHeaderNotes(sheet) {
+    const DL = CONFIG.DASHBOARD_LAYOUT;
+    sheet.getRange(1, DL.TOTAL_COL).setNote("Total projects with a deadline in this month.");
+    sheet.getRange(1, DL.UPCOMING_COL).setNote("Projects 'In Progress' or 'Scheduled' with a deadline in the future.");
+    sheet.getRange(1, DL.OVERDUE_COL).setNote("Projects 'In Progress' with a deadline in the past. Click number to see details.");
+    sheet.getRange(1, DL.APPROVED_COL).setNote("Projects with 'Permits' status set to 'approved'.");
+    sheet.getRange(1, DL.GT_TOTAL_COL).setNote("Grand total of all projects with a valid deadline.");
+}
+
+/** Applies conditional formatting and banding to the dashboard. */
+function applyDashboardFormatting(sheet, numDataRows) {
+  const DL = CONFIG.DASHBOARD_LAYOUT;
+  const DF = CONFIG.DASHBOARD_FORMATTING;
+  const dataRange = sheet.getRange(2, 1, numDataRows, 5);
+
+  // Apply banding
+  dataRange.applyRowBanding(SpreadsheetApp.RowBandingTheme.LIGHT_GREY)
+           .setHeaderRow(null) // No header color from banding
+           .setFirstRowColor(DF.BANDING_COLOR_ODD)
+           .setSecondRowColor(DF.BANDING_COLOR_EVEN);
+
+  // Center align all data
+  sheet.getRange(2, 1, numDataRows, DL.GT_APPROVED_COL).setHorizontalAlignment("center");
+
+  // Format month column
+  sheet.getRange(2, DL.MONTH_COL, numDataRows, 1).setNumberFormat(DF.MONTH_FORMAT);
+
+  // Format count columns
+  sheet.getRange(2, DL.TOTAL_COL, numDataRows, 4).setNumberFormat(DF.COUNT_FORMAT);
+  sheet.getRange(2, DL.GT_UPCOMING_COL, 1, 4).setNumberFormat(DF.COUNT_FORMAT);
+
+  // Add borders for clarity
+  sheet.getRange(1, 1, numDataRows + 1, DL.GT_APPROVED_COL).setBorder(true, true, true, true, true, true, DF.BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID_THIN);
+}
+
+/** Hides temporary data columns used for charting. */
+function hideDataColumns(sheet) {
+    const DL = CONFIG.DASHBOARD_LAYOUT;
+    sheet.hideColumns(DL.HIDE_COL_START, DL.HIDE_COL_END - DL.HIDE_COL_START + 1);
+}
+
+/** Creates or updates dashboard charts. */
+function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
+    // Remove existing charts to prevent duplicates
+    sheet.getCharts().forEach(chart => sheet.removeChart(chart));
+
+    const DC = CONFIG.DASHBOARD_CHARTING;
+    const DL = CONFIG.DASHBOARD_LAYOUT;
+    const DF = CONFIG.DASHBOARD_FORMATTING.CHART_COLORS;
+
+    // Prepare data for charts
+    const chartData = months.map((month, i) => [
+        month,
+        dashboardData[i][2], // Overdue
+        dashboardData[i][1], // Upcoming
+        dashboardData[i][0]  // Total
+    ]);
+
+    const tempSheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet("TempChartData");
+    tempSheet.getRange(1, 1, chartData.length, 4).setValues(chartData);
+
+    const createChart = (title, dataRange, seriesColors) => {
+        const builder = sheet.newChart()
+            .setChartType(Charts.ChartType.COLUMN)
+            .addRange(dataRange)
+            .setOption('title', title)
+            .setOption('width', DC.CHART_WIDTH)
+            .setOption('height', DC.CHART_HEIGHT)
+            .setOption('colors', seriesColors)
+            .setOption('legend', { position: 'top' })
+            .asColumnChart();
+        return builder.build();
+    };
+
+    // Past 3 Months Trend
+    const pastDataRange = tempSheet.getRange(1, 1, DC.PAST_MONTHS_COUNT, 4);
+    const pastChart = createChart('Past 3 Months: Overdue vs. Total', pastDataRange, [DF.overdue, DF.total]);
+
+    // Upcoming 6 Months Trend
+    const upcomingDataRange = tempSheet.getRange(DC.PAST_MONTHS_COUNT + 1, 1, DC.UPCOMING_MONTHS_COUNT, 4);
+    const upcomingChart = createChart('Next 6 Months: Upcoming vs. Total', upcomingDataRange, [DF.upcoming, DF.total]);
+
+    sheet.insertChart(pastChart);
+    sheet.insertChart(upcomingChart);
+
+    SpreadsheetApp.getActiveSpreadsheet().deleteSheet(tempSheet);
+}
+
+/** Generates a list of months between a start and end date. */
+function generateMonthList(startDate, endDate) {
+    const months = [];
+    let currentDate = new Date(startDate.getTime());
+    while (currentDate <= endDate) {
+        months.push(new Date(currentDate));
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+    return months;
+}
