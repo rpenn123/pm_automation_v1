@@ -296,11 +296,11 @@ function applyDashboardFormatting(sheet, numDataRows) {
   const DF = CONFIG.DASHBOARD_FORMATTING;
   const dataRange = sheet.getRange(2, 1, numDataRows, 5);
 
-  // Apply banding
-  dataRange.applyRowBanding() // Apply default banding theme
-           .setHeaderRow(null) // No header color from banding
-           .setFirstRowColor(DF.BANDING_COLOR_ODD)
-           .setSecondRowColor(DF.BANDING_COLOR_EVEN);
+  // Apply and configure banding
+  const banding = dataRange.applyRowBanding(); // Apply default banding theme
+  banding.setHeaderRow(null); // No header color from banding
+  banding.setFirstRowColor(DF.BANDING_COLOR_ODD);
+  banding.setSecondRowColor(DF.BANDING_COLOR_EVEN);
 
   // Center align all data
   sheet.getRange(2, 1, numDataRows, DL.GT_APPROVED_COL).setHorizontalAlignment("center");
@@ -322,7 +322,7 @@ function hideDataColumns(sheet) {
     sheet.hideColumns(DL.HIDE_COL_START, DL.HIDE_COL_END - DL.HIDE_COL_START + 1);
 }
 
-/** Creates or updates dashboard charts. */
+/** Creates or updates dashboard charts, now with robust temp sheet handling. */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     // Remove existing charts to prevent duplicates
     sheet.getCharts().forEach(chart => sheet.removeChart(chart));
@@ -330,6 +330,8 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     const DC = CONFIG.DASHBOARD_CHARTING;
     const DL = CONFIG.DASHBOARD_LAYOUT;
     const DF = CONFIG.DASHBOARD_FORMATTING.CHART_COLORS;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const tempSheetName = "TempChartData_Dashboard"; // Use a more specific name
 
     // Prepare data for charts
     const chartData = months.map((month, i) => [
@@ -339,34 +341,49 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
         dashboardData[i][0]  // Total
     ]);
 
-    const tempSheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet("TempChartData");
-    tempSheet.getRange(1, 1, chartData.length, 4).setValues(chartData);
+    // --- Robust Temp Sheet Handling ---
+    let tempSheet = ss.getSheetByName(tempSheetName);
+    if (tempSheet) {
+      ss.deleteSheet(tempSheet); // Delete if it exists from a previous failed run
+    }
+    tempSheet = ss.insertSheet(tempSheetName);
+    // --- End Robust Handling ---
 
-    const createChart = (title, dataRange, seriesColors) => {
-        const builder = sheet.newChart()
-            .setChartType(Charts.ChartType.COLUMN)
-            .addRange(dataRange)
-            .setOption('title', title)
-            .setOption('width', DC.CHART_WIDTH)
-            .setOption('height', DC.CHART_HEIGHT)
-            .setOption('colors', seriesColors)
-            .setOption('legend', { position: 'top' })
-            .asColumnChart();
-        return builder.build();
-    };
+    try {
+        tempSheet.getRange(1, 1, chartData.length, 4).setValues(chartData);
 
-    // Past 3 Months Trend
-    const pastDataRange = tempSheet.getRange(1, 1, DC.PAST_MONTHS_COUNT, 4);
-    const pastChart = createChart('Past 3 Months: Overdue vs. Total', pastDataRange, [DF.overdue, DF.total]);
+        const createChart = (title, dataRange, seriesColors) => {
+            const builder = sheet.newChart()
+                .setChartType(Charts.ChartType.COLUMN)
+                .addRange(dataRange)
+                .setOption('title', title)
+                .setOption('width', DC.CHART_WIDTH)
+                .setOption('height', DC.CHART_HEIGHT)
+                .setOption('colors', seriesColors)
+                .setOption('legend', { position: 'top' })
+                .asColumnChart();
+            return builder.build();
+        };
 
-    // Upcoming 6 Months Trend
-    const upcomingDataRange = tempSheet.getRange(DC.PAST_MONTHS_COUNT + 1, 1, DC.UPCOMING_MONTHS_COUNT, 4);
-    const upcomingChart = createChart('Next 6 Months: Upcoming vs. Total', upcomingDataRange, [DF.upcoming, DF.total]);
+        // Past 3 Months Trend
+        const pastDataRange = tempSheet.getRange(1, 1, DC.PAST_MONTHS_COUNT, 4);
+        const pastChart = createChart('Past 3 Months: Overdue vs. Total', pastDataRange, [DF.overdue, DF.total]);
 
-    sheet.insertChart(pastChart);
-    sheet.insertChart(upcomingChart);
+        // Upcoming 6 Months Trend
+        const upcomingDataRange = tempSheet.getRange(DC.PAST_MONTHS_COUNT + 1, 1, DC.UPCOMING_MONTHS_COUNT, 4);
+        const upcomingChart = createChart('Next 6 Months: Upcoming vs. Total', upcomingDataRange, [DF.upcoming, DF.total]);
 
-    SpreadsheetApp.getActiveSpreadsheet().deleteSheet(tempSheet);
+        sheet.insertChart(pastChart);
+        sheet.insertChart(upcomingChart);
+
+    } finally {
+        // --- Cleanup ---
+        // Ensure the temporary sheet is always deleted, even if chart creation fails.
+        if (tempSheet) {
+            ss.deleteSheet(tempSheet);
+        }
+        // --- End Cleanup ---
+    }
 }
 
 /** Generates a list of months between a start and end date. */
