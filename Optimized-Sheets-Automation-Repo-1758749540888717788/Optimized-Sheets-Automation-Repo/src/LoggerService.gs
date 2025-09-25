@@ -5,8 +5,14 @@
  */
 
 /**
- * Email notification on critical errors.
- * Centralized function used across the entire application.
+ * Sends a formatted email notification when a critical error occurs.
+ * This function constructs a detailed HTML email with the error message, stack trace,
+ * and spreadsheet context. It includes a plain text fallback for email clients
+ * that do not support HTML.
+ *
+ * @param {string} subjectDetails A brief description of the error context (e.g., "Dashboard Update Failed").
+ * @param {Error} error The JavaScript Error object that was caught.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss] The spreadsheet where the error occurred. Defaults to the active spreadsheet if not provided.
  */
 function notifyError(subjectDetails, error, ss) {
   const email = CONFIG.ERROR_NOTIFICATION_EMAIL;
@@ -67,8 +73,13 @@ function notifyError(subjectDetails, error, ss) {
 }
 
 /**
- * Find or create the external log spreadsheet and store its ID in script properties.
- * If creation/open fails (e.g., due to missing scopes), falls back to the active spreadsheet.
+ * Retrieves, creates, or falls back to the designated log spreadsheet.
+ * The function first tries to open the spreadsheet using an ID stored in Script Properties.
+ * If that fails, it attempts to create a new spreadsheet in the user's Drive.
+ * If creation also fails (e.g., due to insufficient permissions), it defaults to using
+ * the currently active spreadsheet as a last resort, ensuring that logging can always proceed.
+ *
+ * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet} The log spreadsheet object.
  */
 function getOrCreateLogSpreadsheet() {
   const props = PropertiesService.getScriptProperties();
@@ -105,7 +116,15 @@ function getOrCreateLogSpreadsheet() {
   }
 }
 
-/** Ensure a monthly tab exists in the provided log workbook. */
+/**
+ * Ensures that a sheet for the specified month exists in the log spreadsheet.
+ * If the sheet doesn't exist, it creates and formats it with a header row.
+ * Sheet names are based on a "YYYY-MM" key.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} logSS The spreadsheet where logs are stored.
+ * @param {string} [monthKey] The month key (e.g., "2024-07"). Defaults to the current month.
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet} The sheet for the specified month.
+ */
 function ensureMonthlyLogSheet(logSS, monthKey) {
   // Use the padded month key for standardized log sheet names
   const key = monthKey || getMonthKeyPadded();
@@ -124,7 +143,21 @@ function ensureMonthlyLogSheet(logSS, monthKey) {
   return sh;
 }
 
-/** Write an audit entry to the external monthly log (or fallback). */
+/**
+ * Writes a detailed audit entry to the appropriate monthly log sheet.
+ * This function orchestrates getting the log spreadsheet and the correct monthly sheet,
+ * then appends a new row with the provided audit information.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} sourceSS The spreadsheet where the audited action occurred.
+ * @param {object} entry An object containing the details of the log entry.
+ * @param {string} entry.action The name of the action being logged (e.g., "SyncFtoU").
+ * @param {string} [entry.sourceSheet] The name of the sheet where the action was initiated.
+ * @param {number} [entry.sourceRow] The row number related to the action.
+ * @param {string} [entry.projectName] The project name involved in the action.
+ * @param {string} [entry.details] A description of what happened.
+ * @param {string} [entry.result] The outcome of the action (e.g., "success", "skipped").
+ * @param {string} [entry.errorMessage] Any error message if the action failed.
+ */
 function logAudit(sourceSS, entry) {
   try {
     const logSS = getOrCreateLogSpreadsheet();

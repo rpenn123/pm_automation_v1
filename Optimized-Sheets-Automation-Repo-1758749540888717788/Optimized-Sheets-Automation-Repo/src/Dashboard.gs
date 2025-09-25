@@ -6,7 +6,14 @@
  */
 
 /**
- * Main orchestrator function to update the Dashboard sheet.
+ * Main orchestrator function to generate or update the entire Dashboard.
+ * This function, typically triggered from the custom menu, follows a sequence:
+ * 1. Reads raw data from the 'Forecasting' sheet.
+ * 2. Processes the data in a single pass to create summaries and identify overdue items.
+ * 3. Populates the 'Overdue Details' sheet with a drill-down list of overdue projects.
+ * 4. Clears, resizes, and populates the main 'Dashboard' sheet with monthly summaries and grand totals.
+ * 5. Applies all formatting, including colors, number formats, and borders.
+ * 6. Generates and embeds summary charts directly into the dashboard.
  */
 function updateDashboard() {
   const ui = SpreadsheetApp.getUi();
@@ -114,7 +121,14 @@ function updateDashboard() {
 // ==================== DATA PROCESSING ============================
 // =================================================================
 
-/** Reads necessary data from the Forecasting sheet. */
+/**
+ * Reads the necessary data from the 'Forecasting' sheet efficiently.
+ * It determines the required columns from `CONFIG` to avoid reading the entire sheet,
+ * and returns both the data values and the header row.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} forecastSheet The 'Forecasting' sheet object.
+ * @returns {{forecastingValues: Array<Array<*>>, forecastingHeaders: Array<string>}|null} An object containing the 2D data array and the 1D header array, or null on failure.
+ */
 function readForecastingData(forecastSheet) {
   try {
     const dataRange = forecastSheet.getDataRange();
@@ -137,9 +151,13 @@ function readForecastingData(forecastSheet) {
 }
 
 /**
- * OPTIMIZED: Processes forecasting data in a single pass.
- * @param {Array[]} forecastingValues 2D array of data.
- * @returns {object} Summarized data.
+ * Processes the raw forecasting data in a single, efficient pass to generate all necessary summaries.
+ * This function iterates through each row, categorizes it based on its deadline and status,
+ * and aggregates the results into monthly summaries, grand totals, a list of overdue items,
+ * and a count of rows with missing or invalid deadlines.
+ *
+ * @param {Array<Array<*>>} forecastingValues A 2D array of the data rows from the 'Forecasting' sheet.
+ * @returns {{monthlySummaries: Map<string, number[]>, grandTotals: number[], allOverdueItems: Array<Array<*>>, missingDeadlinesCount: number}} An object containing the processed data.
  */
 function processForecastingData(forecastingValues) {
   const monthlySummaries = new Map();
@@ -216,10 +234,12 @@ function processForecastingData(forecastingValues) {
 // =================================================================
 
 /**
- * Populates the Overdue Details sheet with the provided data.
- * @param {Sheet} overdueDetailsSheet The destination sheet.
- * @param {Array[]} allOverdueItems The data rows to write.
- * @param {Array<string>} forecastingHeaders The header row.
+ * Clears and populates the 'Overdue Details' sheet with the full data for all overdue projects.
+ * This provides a "drill-down" view for the overdue counts on the main dashboard.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} overdueDetailsSheet The destination sheet object.
+ * @param {Array<Array<*>>} allOverdueItems A 2D array of the data rows for overdue projects.
+ * @param {Array<string>} forecastingHeaders The header row from the 'Forecasting' sheet to use for the details sheet.
  */
 function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders) {
   try {
@@ -254,7 +274,11 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
   }
 }
 
-/** Sets the main headers for the dashboard. */
+/**
+ * Sets the static main headers for the dashboard summary table.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
+ */
 function setDashboardHeaders(sheet) {
   const DL = CONFIG.DASHBOARD_LAYOUT;
   const DF = CONFIG.DASHBOARD_FORMATTING;
@@ -280,7 +304,11 @@ function setDashboardHeaders(sheet) {
   });
 }
 
-/** Sets explanatory notes for dashboard headers. */
+/**
+ * Sets explanatory notes on the dashboard header cells to provide context for each metric.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
+ */
 function setDashboardHeaderNotes(sheet) {
     const DL = CONFIG.DASHBOARD_LAYOUT;
     sheet.getRange(1, DL.TOTAL_COL).setNote("Total projects with a deadline in this month.");
@@ -290,7 +318,13 @@ function setDashboardHeaderNotes(sheet) {
     sheet.getRange(1, DL.GT_TOTAL_COL).setNote("Grand total of all projects with a valid deadline.");
 }
 
-/** Applies conditional formatting and banding to the dashboard. */
+/**
+ * Applies all visual formatting to the dashboard data range, including row banding,
+ * text alignment, number formatting, and borders.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
+ * @param {number} numDataRows The number of data rows (months) being displayed.
+ */
 function applyDashboardFormatting(sheet, numDataRows) {
   const DL = CONFIG.DASHBOARD_LAYOUT;
   const DF = CONFIG.DASHBOARD_FORMATTING;
@@ -316,15 +350,26 @@ function applyDashboardFormatting(sheet, numDataRows) {
   sheet.getRange(1, 1, numDataRows + 1, DL.GT_APPROVED_COL).setBorder(true, true, true, true, true, true, DF.BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID_THIN);
 }
 
-/** Hides temporary data columns used for charting. */
+/**
+ * Hides the temporary data columns that are used as a source for the dashboard charts.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
+ */
 function hideDataColumns(sheet) {
     const DL = CONFIG.DASHBOARD_LAYOUT;
     sheet.hideColumns(DL.HIDE_COL_START, DL.HIDE_COL_END - DL.HIDE_COL_START + 1);
 }
 
 /**
- * FINAL REFACTOR: Creates dashboard charts using a robust, date-based filtering approach.
- * This method avoids fragile index-based slicing and is resilient to gaps in data.
+ * Creates or updates the charts on the dashboard.
+ * This robust function first removes any existing charts to ensure a clean slate. It then creates
+ * a temporary, hidden sheet to stage the data for each chart, which prevents issues with
+ * chart data ranges. It filters the main dashboard data into "past" and "upcoming" periods
+ * based on the current date, then generates and inserts a column chart for each period.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
+ * @param {Date[]} months The full list of month Date objects for the dashboard's time range.
+ * @param {Array<Array<number>>} dashboardData The 2D array of summary data corresponding to the months list.
  */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     // Clean up previous state
@@ -425,7 +470,14 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     }
 }
 
-/** Generates a list of months between a start and end date. */
+/**
+ * Generates an array of Date objects, representing the first day of each month
+ * between a specified start and end date (inclusive).
+ *
+ * @param {Date} startDate The first month to include in the list.
+ * @param {Date} endDate The last month to include in the list.
+ * @returns {Date[]} An array of Date objects.
+ */
 function generateMonthList(startDate, endDate) {
     const months = [];
     let currentDate = new Date(startDate.getTime());

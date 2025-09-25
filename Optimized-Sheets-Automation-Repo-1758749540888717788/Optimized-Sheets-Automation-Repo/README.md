@@ -20,16 +20,22 @@ The architecture has been modernized to follow best practices, making it ideal f
 
 ## Architecture Highlights
 
-The project utilizes a modular architecture for improved maintainability:
+The project utilizes a modular architecture for improved maintainability. Each file in the `/src` directory has a specific responsibility:
 
--   `/src/Config.gs`: Centralized settings (Single Source of Truth).
--   `/src/Utilities.gs`: Shared helper functions (normalization, lookups, dates).
--   `/src/LoggerService.gs`: Encapsulated logging and error handling.
--   `/src/LastEditService.gs`: Manages "Last Edit" columns.
--   `/src/TransferEngine.gs`: Generic, reusable data transfer logic.
--   `/src/Automations.gs`: `onEdit` routing, synchronization, and transfer definitions.
--   `/src/Dashboard.gs`: Dashboard generation logic.
--   `/src/Setup.gs`: Menu UI and installation routines.
+-   `/src/Config.gs`: Centralized configuration object (Single Source of Truth) for all settings, including sheet names, column mappings, status strings, and dashboard layout properties.
+-   `/src/Utilities.gs`: A collection of shared helper functions for common tasks like data normalization, date manipulation, sheet lookups, and object creation.
+-   `/src/LoggerService.gs`: Encapsulated service for handling all logging. This includes sending detailed email notifications on critical errors and writing to a persistent, external audit log.
+-   `/src/LastEditService.gs`: Manages the "Last Edit" feature, including the creation, update, and initialization of timestamp and relative-time columns on tracked sheets.
+-   `/src/TransferEngine.gs`: A generic, reusable engine for executing configuration-based data transfers between sheets. It handles locking, duplicate checking, and post-transfer actions like sorting.
+-   `/src/Automations.gs`: The core of the automation logic. Contains the main `onEdit` trigger handler, which routes edits to the appropriate sync or transfer functions based on a set of rules.
+-   `/src/Dashboard.gs`: Contains all logic for generating the project dashboard, including data aggregation, summary calculations, chart creation, and formatting.
+-   `/src/Setup.gs`: Handles user-facing setup tasks, including creating the custom UI menu (`onOpen`) and the one-time installation routine for triggers and logging.
+
+## Developer Documentation
+
+This project adheres to a high standard of code documentation. All functions across all `.gs` files are documented using **JSDoc**.
+
+For a detailed understanding of any specific function, its parameters, return values, and purpose, please refer directly to the source code comments within the `/src` directory. The JSDoc comments provide a complete reference for developers looking to understand or extend the codebase.
 
 ## Setup Instructions (Using clasp)
 

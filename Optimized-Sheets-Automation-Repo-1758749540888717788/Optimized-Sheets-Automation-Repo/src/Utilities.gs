@@ -9,8 +9,13 @@
 // =================================================================
 
 /**
- * Normalize values for comparison to avoid synchronization loops.
- * Handles various types including Dates and Booleans.
+ * Normalizes a value for consistent comparison, crucial for preventing synchronization loops.
+ * It handles various data types: null/undefined become an empty string, booleans are converted
+ * to string representations, and Dates are formatted into a consistent ISO-like string.
+ * All other values are converted to a trimmed string.
+ *
+ * @param {*} val The value to normalize.
+ * @returns {string} The normalized string representation of the value.
  */
 function normalizeForComparison(val) {
   if (val === null || val === undefined) return "";
@@ -22,13 +27,26 @@ function normalizeForComparison(val) {
   return String(val).trim();
 }
 
-/** Normalize any value to a lowercased, trimmed string. */
+/**
+ * Normalizes any value into a lowercased, trimmed string.
+ * If the value is null or undefined, it returns an empty string.
+ *
+ * @param {*} val The value to normalize.
+ * @returns {string} The normalized, lowercased string.
+ */
 function normalizeString(val) {
   if (val === null || val === undefined) return "";
   return String(val).trim().toLowerCase();
 }
 
-/** True-like helper for checkbox or text TRUE/YES/Y/1. */
+/**
+ * Checks if a value is "true-like". This is useful for handling values from checkboxes
+ * or user input where "true" could be represented in multiple ways.
+ * It checks for "true", "yes", "y", or "1" in a case-insensitive manner.
+ *
+ * @param {*} val The value to check.
+ * @returns {boolean} True if the value is considered "true-like", otherwise false.
+ */
 function isTrueLike(val) {
   const v = normalizeString(val);
   return v === "true" || v === "yes" || v === "y" || v === "1";
@@ -39,8 +57,11 @@ function isTrueLike(val) {
 // =================================================================
 
 /**
- * Parses a value into a Date object and normalizes it to the start of the day (midnight).
- * Returns null if the value is not a valid date.
+ * Parses a value into a Date object and normalizes it to the beginning of the day (midnight).
+ * This is useful for date-based comparisons where the time of day is irrelevant.
+ *
+ * @param {*} value The value to parse (can be a Date object, string, or number).
+ * @returns {Date|null} A new Date object set to midnight, or null if the value is not a valid date.
  */
 function parseAndNormalizeDate(value) {
   if (value instanceof Date && !isNaN(value.getTime())) {
@@ -58,7 +79,13 @@ function parseAndNormalizeDate(value) {
   return null;
 }
 
-/** Format values for key building (dates -> yyyy-MM-dd). Used in TransferEngine duplicate checks. */
+/**
+ * Formats a value for use in creating unique keys, especially for duplicate checks in TransferEngine.
+ * Dates are formatted as "yyyy-MM-dd". Other values are normalized to a lowercased, trimmed string.
+ *
+ * @param {*} value The value to format.
+ * @returns {string} The formatted string key.
+ */
 function formatValueForKey(value) {
   if (value instanceof Date && !isNaN(value.getTime())) {
     return Utilities.formatDate(value, Session.getScriptTimeZone(), "yyyy-MM-dd");
@@ -66,7 +93,14 @@ function formatValueForKey(value) {
   return (value !== null && value !== undefined) ? String(value).trim().toLowerCase() : "";
 }
 
-/** Return YYYY-MM (padded) for a date (current if omitted). Used in LoggerService. */
+/**
+ * Generates a padded, sortable month key in "YYYY-MM" format from a Date object.
+ * If no date is provided, the current date is used. This is primarily used by the LoggerService
+ * for naming monthly log sheets.
+ *
+ * @param {Date} [d=new Date()] The date to format. Defaults to the current date.
+ * @returns {string} The formatted month key (e.g., "2024-07").
+ */
 function getMonthKeyPadded(d) {
   const dt = d || new Date();
   const y = dt.getFullYear();
@@ -78,7 +112,14 @@ function getMonthKeyPadded(d) {
 // ==================== SHEET UTILITIES ============================
 // =================================================================
 
-/** Find a header by text in row 1 and return its 1-based column index. */
+/**
+ * Finds the 1-based column index of a header in the first row of a sheet.
+ * The search is case-insensitive and trims whitespace from both the header and the target text.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search in.
+ * @param {string} headerText The text of the header to find.
+ * @returns {number} The 1-based column index of the header, or -1 if not found.
+ */
 function getHeaderColumnIndex(sheet, headerText) {
   const lastCol = sheet.getLastColumn();
   if (lastCol < 1) return -1;
@@ -93,9 +134,14 @@ function getHeaderColumnIndex(sheet, headerText) {
 }
 
 /**
- * Robust row lookup by Project Name.
- * Tries TextFinder (entire cell, case-insensitive) then a fallback manual scan.
- * Returns 1-based row index or -1 if not found.
+ * Performs a robust, case-insensitive search for a project name in a specified column and returns its 1-based row index.
+ * It first attempts a fast search using `TextFinder` for an exact cell match. If that fails, it falls back to a manual
+ * scan of the column values, which can handle edge cases `TextFinder` might miss.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search.
+ * @param {string} projectName The name of the project to find.
+ * @param {number} projectNameCol The 1-based column index where project names are stored.
+ * @returns {number} The 1-based row index of the project, or -1 if not found or if an error occurs.
  */
 function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
   if (!sheet || !projectName || typeof projectName !== "string" || !projectNameCol) return -1;
@@ -128,7 +174,13 @@ function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
   }
 }
 
-/** Helper to get or create a sheet. Used in Dashboard.gs. */
+/**
+ * Gets a sheet by its name. If the sheet does not exist, it creates a new one with that name.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to get the sheet from.
+ * @param {string} sheetName The name of the sheet to get or create.
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet} The existing or newly created sheet.
+ */
 function getOrCreateSheet(ss, sheetName) {
   let sheet = ss.getSheetByName(sheetName);
   if (!sheet) sheet = ss.insertSheet(sheetName);
@@ -164,7 +216,14 @@ function clearAndResizeSheet(sheet, requiredRowCount) {
 // ==================== OBJECT UTILITIES ===========================
 // =================================================================
 
-/** Create a mapping object from pairs [[sourceCol, destCol], ...]. Used for Transfers. */
+/**
+ * Creates a simple mapping object from an array of source-destination pairs.
+ * This is used in the TransferEngine to define how columns from a source sheet
+ * map to columns in a destination sheet.
+ *
+ * @param {Array<[number, number]>} pairs An array of pairs, where each pair is `[sourceColumn, destinationColumn]`.
+ * @returns {Object<number, number>} An object where keys are source columns and values are destination columns.
+ */
 function createMapping(pairs) {
   const o = {};
   for (const [source, dest] of pairs) {
@@ -173,7 +232,13 @@ function createMapping(pairs) {
   return o;
 }
 
-/** Get max numeric value in an object's own property values. */
+/**
+ * Gets the maximum numeric value among an object's own properties.
+ * This is useful for determining the required width of a row when building it from a mapping.
+ *
+ * @param {Object<any, any>} obj The object to inspect.
+ * @returns {number} The highest numeric value found, or 0 if none exist.
+ */
 function getMaxValueInObject(obj) {
   let max = 0;
   for (const k in obj) {
@@ -185,7 +250,13 @@ function getMaxValueInObject(obj) {
   return max;
 }
 
-/** Return unique array of numbers. Uses V8 Set for efficiency. */
+/**
+ * Returns an array with all duplicate values removed.
+ * It leverages the high performance of the V8 engine's `Set` object for efficiency.
+ *
+ * @param {Array<any>} arr The array to deduplicate.
+ * @returns {Array<any>} A new array containing only the unique elements from the input array.
+ */
 function uniqueArray(arr) {
   return [...new Set(arr)];
 }
