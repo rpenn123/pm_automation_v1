@@ -135,6 +135,31 @@ function getOrCreateSheet(ss, sheetName) {
   return sheet;
 }
 
+/**
+ * Clears and prepares a sheet by ensuring it has a fixed number of rows.
+ * Deletes excess rows or adds missing rows to match a predefined count.
+ * This is crucial for maintaining a consistent layout on sheets like the Dashboard.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to prepare.
+ * @param {number} requiredRowCount The exact number of rows the sheet should have.
+ */
+function clearAndResizeSheet(sheet, requiredRowCount) {
+  if (!sheet || typeof requiredRowCount !== 'number' || requiredRowCount < 1) {
+    throw new Error("Invalid parameters provided to clearAndResizeSheet.");
+  }
+
+  // Clear all content, formatting, and data validations.
+  sheet.clear();
+
+  // Adjust row count to the fixed number.
+  const maxRows = sheet.getMaxRows();
+  if (maxRows < requiredRowCount) {
+    sheet.insertRowsAfter(maxRows, requiredRowCount - maxRows);
+  } else if (maxRows > requiredRowCount) {
+    sheet.deleteRows(requiredRowCount + 1, maxRows - requiredRowCount);
+  }
+}
+
 // =================================================================
 // ==================== OBJECT UTILITIES ===========================
 // =================================================================

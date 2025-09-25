@@ -37,7 +37,7 @@ function updateDashboard() {
     populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders);
     
     // 4. Prepare and Populate Dashboard
-    clearAndPrepareDashboardSheet(dashboardSheet);
+    clearAndResizeSheet(dashboardSheet, CONFIG.DASHBOARD_LAYOUT.FIXED_ROW_COUNT);
     setDashboardHeaders(dashboardSheet);
     setDashboardHeaderNotes(dashboardSheet);
 
@@ -251,20 +251,6 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
   } catch (e) {
     Logger.log(`ERROR in populateOverdueDetailsSheet: ${e.message}`);
     // No need to throw here, as dashboard can still partially function
-  }
-}
-
-/** Clears and prepares the dashboard sheet for new data. */
-function clearAndPrepareDashboardSheet(sheet) {
-  const DL = CONFIG.DASHBOARD_LAYOUT;
-  sheet.clear(); // Clear all content and formats
-
-  // Ensure a fixed number of rows for consistent layout
-  const maxRows = sheet.getMaxRows();
-  if (maxRows < DL.FIXED_ROW_COUNT) {
-    sheet.insertRowsAfter(maxRows, DL.FIXED_ROW_COUNT - maxRows);
-  } else if (maxRows > DL.FIXED_ROW_COUNT) {
-    sheet.deleteRows(DL.FIXED_ROW_COUNT + 1, maxRows - DL.FIXED_ROW_COUNT);
   }
 }
 
