@@ -215,7 +215,47 @@ function processForecastingData(forecastingValues) {
 // ==================== PRESENTATION LOGIC =========================
 // =================================================================
 
-// (The remaining functions: populateOverdueDetailsSheet, clearAndPrepareDashboardSheet, 
+/**
+ * Populates the Overdue Details sheet with the provided data.
+ * @param {Sheet} overdueDetailsSheet The destination sheet.
+ * @param {Array[]} allOverdueItems The data rows to write.
+ * @param {Array<string>} forecastingHeaders The header row.
+ */
+function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders) {
+  try {
+    const numRows = allOverdueItems.length;
+    const numCols = forecastingHeaders.length;
+
+    // Clear previous data and formatting
+    overdueDetailsSheet.clear();
+    if (overdueDetailsSheet.getMaxRows() > 1) {
+      overdueDetailsSheet.deleteRows(2, overdueDetailsSheet.getMaxRows() - 1);
+    }
+    if (overdueDetailsSheet.getMaxColumns() > numCols) {
+        overdueDetailsSheet.deleteColumns(numCols + 1, overdueDetailsSheet.getMaxColumns() - numCols);
+    }
+
+    // Write headers
+    overdueDetailsSheet.getRange(1, 1, 1, numCols).setValues([forecastingHeaders]).setFontWeight("bold");
+
+    if (numRows > 0) {
+      // Ensure enough rows exist for the data
+      if (overdueDetailsSheet.getMaxRows() < numRows + 1) {
+        overdueDetailsSheet.insertRowsAfter(1, numRows);
+      }
+      // Write data
+      overdueDetailsSheet.getRange(2, 1, numRows, numCols).setValues(allOverdueItems);
+    }
+
+    Logger.log(`Populated Overdue Details sheet with ${numRows} items.`);
+  } catch (e) {
+    Logger.log(`ERROR in populateOverdueDetailsSheet: ${e.message}`);
+    // No need to throw here, as dashboard can still partially function
+  }
+}
+
+
+// (The remaining functions: clearAndPrepareDashboardSheet,
 // setDashboardHeaders, setDashboardHeaderNotes, applyDashboardFormatting, hideDataColumns, 
 // createOrUpdateDashboardCharts, generateMonthList are omitted for brevity but are 
 // included in the final repository. They primarily handle the visualization and formatting
