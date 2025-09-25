@@ -322,74 +322,123 @@ function hideDataColumns(sheet) {
     sheet.hideColumns(DL.HIDE_COL_START, DL.HIDE_COL_END - DL.HIDE_COL_START + 1);
 }
 
-/** Creates or updates dashboard charts, now with robust temp sheet handling. */
+/**
+ * REFACTORED: Creates or updates dashboard charts with improved logic.
+ * - Dynamically finds the current month's data.
+ * - Creates "Past" and "Upcoming" charts relative to the current month.
+ * - Handles cases with insufficient data gracefully.
+ * - Uses a temporary sheet for staging chart data.
+ * - Positions charts explicitly to avoid overlap.
+ */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
-    // Remove existing charts to prevent duplicates
+    // Clear existing charts and the temporary sheet for a clean slate
     sheet.getCharts().forEach(chart => sheet.removeChart(chart));
-
-    const DC = CONFIG.DASHBOARD_CHARTING;
-    const DL = CONFIG.DASHBOARD_LAYOUT;
-    const DF = CONFIG.DASHBOARD_FORMATTING.CHART_COLORS;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const tempSheetName = "TempChartData_Dashboard"; // Use a more specific name
-
-    // Prepare data for charts
-    const chartData = months.map((month, i) => [
-        month,
-        dashboardData[i][2], // Overdue
-        dashboardData[i][1], // Upcoming
-        dashboardData[i][0]  // Total
-    ]);
-
-    // --- Robust Temp Sheet Handling ---
+    const tempSheetName = "TempChartData_Dashboard_Internal";
     let tempSheet = ss.getSheetByName(tempSheetName);
     if (tempSheet) {
-      ss.deleteSheet(tempSheet); // Delete if it exists from a previous failed run
+        ss.deleteSheet(tempSheet);
     }
-    tempSheet = ss.insertSheet(tempSheetName);
-    // --- End Robust Handling ---
+    tempSheet = ss.insertSheet(tempSheetName).hideSheet(); // Create and hide
 
     try {
+        const DC = CONFIG.DASHBOARD_CHARTING;
+        const DL = CONFIG.DASHBOARD_LAYOUT;
+        const DF = CONFIG.DASHBOARD_FORMATTING.CHART_COLORS;
+
+        // 1. Prepare base data with month labels for slicing
+        const chartData = months.map((month, i) => {
+            const monthLabel = Utilities.formatDate(month, ss.getSpreadsheetTimeZone(), "MMM yyyy");
+            return [
+                monthLabel,
+                dashboardData[i][2], // Overdue
+                dashboardData[i][1], // Upcoming
+                dashboardData[i][0]  // Total
+            ];
+        });
+
         if (chartData.length === 0) {
-            Logger.log("No data available for charting.");
+            Logger.log("No data available to generate charts.");
             return;
         }
-        tempSheet.getRange(1, 1, chartData.length, 4).setValues(chartData);
 
-        const createChart = (title, dataRange, seriesColors) => {
-            return sheet.newChart()
-                .setChartType(Charts.ChartType.COLUMN).addRange(dataRange)
-                .setOption('title', title).setOption('width', DC.CHART_WIDTH)
-                .setOption('height', DC.CHART_HEIGHT).setOption('colors', seriesColors)
-                .setOption('legend', { position: 'top' }).asColumnChart().build();
-        };
+        // 2. Find the index for the current month to create relative charts
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
+        const currentIndex = months.findIndex(d => d.getFullYear() === currentYear && d.getMonth() === currentMonth);
 
-        // Past 3 Months Trend
-        if (chartData.length >= DC.PAST_MONTHS_COUNT) {
-            const pastDataRange = tempSheet.getRange(1, 1, DC.PAST_MONTHS_COUNT, 4);
-            const pastChart = createChart('Past 3 Months: Overdue vs. Total', pastDataRange, [DF.overdue, DF.total]);
+        if (currentIndex === -1) {
+            Logger.log("Current month not found in dashboard's date range. Relative charts will not be generated.");
+            return;
+        }
+
+        // 3. Prepare and create "Past Months" chart
+        const pastStart = Math.max(0, currentIndex - DC.PAST_MONTHS_COUNT);
+        const pastDataRaw = chartData.slice(pastStart, currentIndex);
+        const pastDataForChart = pastDataRaw.map(row => [row[0], row[1], row[3]]); // Month, Overdue, Total
+
+        if (pastDataForChart.length > 0) {
+            const pastHeaders = [['Month', 'Overdue', 'Total']];
+            tempSheet.clearContents();
+            tempSheet.getRange(1, 1, 1, 3).setValues(pastHeaders);
+            tempSheet.getRange(2, 1, pastDataForChart.length, 3).setValues(pastDataForChart);
+            const pastRange = tempSheet.getRange(1, 1, pastDataForChart.length + 1, 3);
+
+            const pastChart = sheet.newChart().asColumnChart()
+                .addRange(pastRange)
+                .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
+                .setNumHeaders(1)
+                .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_ROWS)
+                .setOption('title', `Past ${pastDataForChart.length} Months: Overdue vs. Total`)
+                .setOption('width', DC.CHART_WIDTH)
+                .setOption('height', DC.CHART_HEIGHT)
+                .setOption('colors', [DF.overdue, DF.total])
+                .setOption('legend', { position: 'top' })
+                .setPosition(DL.CHART_START_ROW, DL.CHART_ANCHOR_COL, 0, 0)
+                .build();
             sheet.insertChart(pastChart);
         } else {
-            Logger.log(`Skipping 'Past 3 Months' chart due to insufficient data. Required: ${DC.PAST_MONTHS_COUNT}, Available: ${chartData.length}`);
+            Logger.log("Not enough past data to generate 'Past Months' chart.");
         }
 
-        // Upcoming 6 Months Trend
-        const upcomingChartStartRow = DC.PAST_MONTHS_COUNT + 1;
-        const requiredRowsForUpcoming = upcomingChartStartRow + DC.UPCOMING_MONTHS_COUNT - 1;
-        if (chartData.length >= requiredRowsForUpcoming) {
-            const upcomingDataRange = tempSheet.getRange(upcomingChartStartRow, 1, DC.UPCOMING_MONTHS_COUNT, 4);
-            const upcomingChart = createChart('Next 6 Months: Upcoming vs. Total', upcomingDataRange, [DF.upcoming, DF.total]);
+        // 4. Prepare and create "Upcoming Months" chart
+        const upcomingEnd = Math.min(chartData.length, currentIndex + DC.UPCOMING_MONTHS_COUNT);
+        const upcomingDataRaw = chartData.slice(currentIndex, upcomingEnd);
+        const upcomingDataForChart = upcomingDataRaw.map(row => [row[0], row[2], row[3]]); // Month, Upcoming, Total
+
+        if (upcomingDataForChart.length > 0) {
+            const upcomingHeaders = [['Month', 'Upcoming', 'Total']];
+            tempSheet.clearContents();
+            tempSheet.getRange(1, 1, 1, 3).setValues(upcomingHeaders);
+            tempSheet.getRange(2, 1, upcomingDataForChart.length, 3).setValues(upcomingDataForChart);
+            const upcomingRange = tempSheet.getRange(1, 1, upcomingDataForChart.length + 1, 3);
+
+            const upcomingChartAnchorRow = DL.CHART_START_ROW + DC.ROW_SPACING;
+
+            const upcomingChart = sheet.newChart().asColumnChart()
+                .addRange(upcomingRange)
+                .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
+                .setNumHeaders(1)
+                .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_ROWS)
+                .setOption('title', `Next ${upcomingDataForChart.length} Months: Upcoming vs. Total`)
+                .setOption('width', DC.CHART_WIDTH)
+                .setOption('height', DC.CHART_HEIGHT)
+                .setOption('colors', [DF.upcoming, DF.total])
+                .setOption('legend', { position: 'top' })
+                .setPosition(upcomingChartAnchorRow, DL.CHART_ANCHOR_COL, 0, 0)
+                .build();
             sheet.insertChart(upcomingChart);
         } else {
-            Logger.log(`Skipping 'Next 6 Months' chart due to insufficient data. Required total months: ${requiredRowsForUpcoming}, Available: ${chartData.length}`);
+             Logger.log("Not enough upcoming data to generate 'Upcoming Months' chart.");
         }
+
+    } catch (e) {
+        Logger.log(`An unexpected error occurred in createOrUpdateDashboardCharts: ${e.message} \\nStack: ${e.stack}`);
     } finally {
-        // --- Cleanup ---
-        // Ensure the temporary sheet is always deleted, even if chart creation fails.
         if (tempSheet) {
             ss.deleteSheet(tempSheet);
         }
-        // --- End Cleanup ---
     }
 }
 
