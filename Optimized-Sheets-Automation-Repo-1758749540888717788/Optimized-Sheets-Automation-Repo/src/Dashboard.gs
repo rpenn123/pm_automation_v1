@@ -378,9 +378,9 @@ function hideDataColumns(sheet) {
 /**
  * Creates or updates the charts on the dashboard.
  * This robust function first removes any existing charts to ensure a clean slate. It then creates
- * a temporary, hidden sheet to stage the data for each chart, which prevents issues with
- * chart data ranges. It filters the main dashboard data into "past" and "upcoming" periods
- * based on the current date, then generates and inserts a column chart for each period.
+ * a temporary, hidden sheet to stage the data for each chart. It filters the main dashboard data
+ * into "past" and "upcoming" periods. If data is missing for a chart, it provides clear feedback
+ * on the sheet itself instead of failing silently.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
  * @param {Date[]} months The full list of month Date objects for the dashboard's time range.
@@ -400,6 +400,20 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
         const DL = CONFIG.DASHBOARD_LAYOUT;
         const DF = CONFIG.DASHBOARD_FORMATTING.CHART_COLORS;
         const timeZone = ss.getSpreadsheetTimeZone();
+
+        // --- Helper to write feedback message on the dashboard ---
+        const setChartPlaceholder = (anchorRow, title, message) => {
+            const range = sheet.getRange(anchorRow, DL.CHART_ANCHOR_COL, 2, 4);
+            range.clearContent();
+            range.merge();
+            range.setValue(`${title}\n\n${message}`)
+                 .setVerticalAlignment("middle")
+                 .setHorizontalAlignment("center")
+                 .setFontColor("#9E9E9E") // Grey color for placeholder
+                 .setFontStyle("italic")
+                 .setBackground("#F5F5F5")
+                 .setBorder(true, true, true, true, null, null, "#E0E0E0", SpreadsheetApp.BorderStyle.DASHED);
+        };
 
         // --- Generic Chart Creation Function ---
         const createChart = (title, data, headers, colors, anchorRow) => {
@@ -434,6 +448,8 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
         const upcomingEndDate = new Date(today.getTime());
         upcomingEndDate.setMonth(upcomingEndDate.getMonth() + DC.UPCOMING_MONTHS_COUNT);
 
+        const formatDateForLog = (date) => Utilities.formatDate(date, timeZone, "yyyy-MM-dd");
+
         // --- Data Filtering using Date Objects ---
         const combinedData = months.map((month, i) => ({
             month: month,
@@ -443,37 +459,41 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
             total: dashboardData[i][0]
         }));
 
-        // Filter for Past Data (e.g., last 3 months, not including current)
         const pastData = combinedData.filter(d => d.month >= pastStartDate && d.month < today)
                                      .map(d => [d.monthLabel, d.overdue, d.total]);
 
-        // Filter for Upcoming Data (e.g., current month + next 5)
         const upcomingData = combinedData.filter(d => d.month >= today && d.month < upcomingEndDate)
                                          .map(d => [d.monthLabel, d.upcoming, d.total]);
 
         // --- Chart Generation ---
+        const pastChartTitle = `Past ${DC.PAST_MONTHS_COUNT} Months: Overdue vs. Total`;
         if (pastData.length > 0) {
             createChart(
-                `Past ${pastData.length} Months: Overdue vs. Total`,
+                pastChartTitle,
                 pastData,
                 ['Month', 'Overdue', 'Total'],
                 [DF.overdue, DF.total],
                 DL.CHART_START_ROW
             );
         } else {
-            Logger.log("No data available for 'Past Months' chart.");
+            const logMsg = `Skipping 'Past Months' chart: No projects found with deadlines between ${formatDateForLog(pastStartDate)} and ${formatDateForLog(today)}.`;
+            Logger.log(logMsg);
+            setChartPlaceholder(DL.CHART_START_ROW, pastChartTitle, "Not enough recent data to generate this chart.");
         }
 
+        const upcomingChartTitle = `Next ${DC.UPCOMING_MONTHS_COUNT} Months: Upcoming vs. Total`;
         if (upcomingData.length > 0) {
             createChart(
-                `Next ${upcomingData.length} Months: Upcoming vs. Total`,
+                upcomingChartTitle,
                 upcomingData,
                 ['Month', 'Upcoming', 'Total'],
                 [DF.upcoming, DF.total],
                 DL.CHART_START_ROW + DC.ROW_SPACING
             );
         } else {
-            Logger.log("No data available for 'Upcoming Months' chart.");
+            const logMsg = `Skipping 'Upcoming Months' chart: No projects found with deadlines between ${formatDateForLog(today)} and ${formatDateForLog(upcomingEndDate)}.`;
+            Logger.log(logMsg);
+            setChartPlaceholder(DL.CHART_START_ROW + DC.ROW_SPACING, upcomingChartTitle, "No upcoming project data to generate this chart.");
         }
 
     } catch (e) {
