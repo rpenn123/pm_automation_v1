@@ -6,14 +6,6 @@
  */
 
 /**
- * @typedef {object} AggregatedMetrics
- * @property {number} total - Total count of projects.
- * @property {number} upcoming - Projects with a future deadline.
- * @property {number} overdue - In-progress projects with a past deadline.
- * @property {number} approved - Projects with approved permits.
- */
-
-/**
  * Main orchestrator function to generate or update the entire Dashboard.
  * This function, typically triggered from the custom menu, follows a sequence:
  * 1. Reads raw data from the 'Forecasting' sheet.
@@ -28,26 +20,15 @@ function updateDashboard() {
   const scriptStartTime = new Date();
   Logger.log(`Dashboard update initiated at ${scriptStartTime.toLocaleString()}`);
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const { DASHBOARD } = CONFIG.SHEETS;
-
-  // Initialize dashboardSheet early for the finally block
-  let dashboardSheet;
-  const lock = LockService.getScriptLock();
 
   try {
-    // Attempt to acquire lock, with a timeout of 30 seconds
-    if (!lock.tryLock(30000)) {
-      ui.alert("The dashboard is currently being updated by another user or process. Please wait a moment and try again. If this message persists, contact support.");
-      return;
-    }
-
-    const { FORECASTING, OVERDUE_DETAILS } = CONFIG.SHEETS;
+    const { FORECASTING, DASHBOARD, OVERDUE_DETAILS } = CONFIG.SHEETS;
 
     const forecastSheet = ss.getSheetByName(FORECASTING);
     if (!forecastSheet) throw new Error(`Sheet "${FORECASTING}" not found.`);
 
     // Initialize destination sheets
-    dashboardSheet = getOrCreateSheet(ss, DASHBOARD);
+    const dashboardSheet = getOrCreateSheet(ss, DASHBOARD);
     const overdueDetailsSheet = getOrCreateSheet(ss, OVERDUE_DETAILS);
     const overdueSheetGid = overdueDetailsSheet.getSheetId();
 
@@ -71,11 +52,11 @@ function updateDashboard() {
     const dataStartRow = 2;
 
     // Map processed data to the months list
-    const defaultMetrics = { total: 0, upcoming: 0, overdue: 0, approved: 0 };
     const dashboardData = months.map(month => {
         // Use standard JS month indexing (0-11) for the map key
         const monthKey = `${month.getFullYear()}-${month.getMonth()}`;
-        return monthlySummaries.get(monthKey) || defaultMetrics;
+        // [total, upcoming, overdue, approved]
+        return monthlySummaries.get(monthKey) || [0, 0, 0, 0];
     });
 
     if (dashboardData.length > 0) {
@@ -88,24 +69,25 @@ function updateDashboard() {
       const DL = CONFIG.DASHBOARD_LAYOUT;
 
       // Prepare data for batch writing
-      const overdueFormulas = dashboardData.map(row => [`=HYPERLINK("#gid=${overdueSheetGid}", ${row.overdue || 0})`]);
+      const overdueFormulas = dashboardData.map(row => [`=HYPERLINK("#gid=${overdueSheetGid}", ${row[2] || 0})`]);
       // Extract [total, upcoming, approved]
-      const otherData = dashboardData.map(row => [row.total, row.upcoming, row.approved]);
+      const otherData = dashboardData.map(row => [row[0], row[1], row[3]]);
 
       // Write data in batches
       dashboardSheet.getRange(dataStartRow, DL.MONTH_COL, numDataRows, 1).setValues(months.map(date => [date]));
-      // Write Total, Upcoming
+      // Write Total and Upcoming
       dashboardSheet.getRange(dataStartRow, DL.TOTAL_COL, numDataRows, 2).setValues(otherData.map(row => [row[0], row[1]]));
       // Write Overdue (with formulas/links)
       dashboardSheet.getRange(dataStartRow, DL.OVERDUE_COL, numDataRows, 1).setFormulas(overdueFormulas);
       // Write Approved
       dashboardSheet.getRange(dataStartRow, DL.APPROVED_COL, numDataRows, 1).setValues(otherData.map(row => [row[2]]));
 
-      // Write Grand Totals using structured object
-      dashboardSheet.getRange(dataStartRow, DL.GT_UPCOMING_COL).setValue(grandTotals.upcoming);
-      dashboardSheet.getRange(dataStartRow, DL.GT_OVERDUE_COL).setFormula(`=HYPERLINK("#gid=${overdueSheetGid}", ${grandTotals.overdue})`);
-      dashboardSheet.getRange(dataStartRow, DL.GT_TOTAL_COL).setValue(grandTotals.total);
-      dashboardSheet.getRange(dataStartRow, DL.GT_APPROVED_COL).setValue(grandTotals.approved);
+      // Write Grand Totals
+      const [gtUpcoming, gtOverdue, gtTotal, gtApproved] = grandTotals;
+      dashboardSheet.getRange(dataStartRow, DL.GT_UPCOMING_COL).setValue(gtUpcoming);
+      dashboardSheet.getRange(dataStartRow, DL.GT_OVERDUE_COL).setFormula(`=HYPERLINK("#gid=${overdueSheetGid}", ${gtOverdue})`);
+      dashboardSheet.getRange(dataStartRow, DL.GT_TOTAL_COL).setValue(gtTotal);
+      dashboardSheet.getRange(dataStartRow, DL.GT_APPROVED_COL).setValue(gtApproved);
 
       // Write Missing Deadlines report
       const missingCell = dashboardSheet.getRange(DL.MISSING_DEADLINE_CELL);
@@ -132,14 +114,6 @@ function updateDashboard() {
     // Use the centralized error notification system
     notifyError("Dashboard Update Failed", error, ss);
     ui.alert(`An error occurred updating the dashboard. Please check logs and the notification email.\nError: ${error.message}`);
-  } finally {
-    if (lock.hasLock()) {
-      lock.releaseLock();
-    }
-    // Ensure the dashboard sheet is active before the script finishes.
-    if (dashboardSheet) {
-      dashboardSheet.activate();
-    }
   }
 }
 
@@ -186,12 +160,13 @@ function readForecastingData(forecastSheet) {
  * and a count of rows with missing or invalid deadlines.
  *
  * @param {Array<Array<*>>} forecastingValues A 2D array of the data rows from the 'Forecasting' sheet.
- * @returns {{monthlySummaries: Map<string, AggregatedMetrics>, grandTotals: AggregatedMetrics, allOverdueItems: Array<Array<*>>, missingDeadlinesCount: number}} An object containing the processed data.
+ * @returns {{monthlySummaries: Map<string, number[]>, grandTotals: number[], allOverdueItems: Array<Array<*>>, missingDeadlinesCount: number}} An object containing the processed data.
  */
 function processForecastingData(forecastingValues) {
   const monthlySummaries = new Map();
   const allOverdueItems = [];
-  const grandTotals = { total: 0, upcoming: 0, overdue: 0, approved: 0 };
+  // [upcoming, overdue, total, approved]
+  let grandTotals = [0, 0, 0, 0];
   let missingDeadlinesCount = 0;
 
   const today = new Date();
@@ -221,13 +196,14 @@ function processForecastingData(forecastingValues) {
     // Use standard JS month indexing (0-11) for the key
     const monthKey = `${deadlineDate.getFullYear()}-${deadlineDate.getMonth()}`;
     if (!monthlySummaries.has(monthKey)) {
-      monthlySummaries.set(monthKey, { total: 0, upcoming: 0, overdue: 0, approved: 0 });
+      // [total, upcoming, overdue, approved]
+      monthlySummaries.set(monthKey, [0, 0, 0, 0]);
     }
     const monthData = monthlySummaries.get(monthKey);
 
     // --- Calculations ---
-    monthData.total++;
-    grandTotals.total++;
+    monthData[0]++; // Total for month
+    grandTotals[2]++; // GT Total
 
     const currentStatus = normalizeString(row[progressIdx]);
     const isActuallyInProgress = currentStatus === inProgressLower;
@@ -236,20 +212,20 @@ function processForecastingData(forecastingValues) {
     if (isActuallyInProgress || isActuallyScheduled) {
       if (deadlineDate > today) {
         // Upcoming
-        monthData.upcoming++;
-        grandTotals.upcoming++;
+        monthData[1]++;
+        grandTotals[0]++;
       } else if (isActuallyInProgress && !isActuallyScheduled) {
         // Overdue criteria: In Progress AND Deadline <= Today AND NOT Scheduled
-        monthData.overdue++;
-        grandTotals.overdue++;
+        monthData[2]++;
+        grandTotals[1]++;
         allOverdueItems.push(row); // Add full row to detailed list
       }
     }
 
     if (normalizeString(row[permitsIdx]) === approvedLower) {
       // Approved
-      monthData.approved++;
-      grandTotals.approved++;
+      monthData[3]++;
+      grandTotals[3]++;
     }
   }
 
@@ -400,19 +376,24 @@ function hideDataColumns(sheet) {
 }
 
 /**
- * Creates or updates the charts on the dashboard using the in-memory `Charts.newDataTable()` method.
- * This approach is more robust and avoids the race conditions associated with using a temporary sheet.
- * It first removes any existing charts, then builds and filters data in memory, and finally generates
- * new charts. If data is missing for a chart, it provides clear feedback on the sheet.
+ * Creates or updates the charts on the dashboard.
+ * This robust function first removes any existing charts to ensure a clean slate. It then creates
+ * a temporary, hidden sheet to stage the data for each chart. It filters the main dashboard data
+ * into "past" and "upcoming" periods. If data is missing for a chart, it provides clear feedback
+ * on the sheet itself instead of failing silently.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
  * @param {Date[]} months The full list of month Date objects for the dashboard's time range.
- * @param {AggregatedMetrics[]} dashboardData The array of summary data objects corresponding to the months list.
+ * @param {Array<Array<number>>} dashboardData The 2D array of summary data corresponding to the months list.
  */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     // Clean up previous state
     sheet.getCharts().forEach(chart => sheet.removeChart(chart));
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const tempSheetName = "TempChartData_Dashboard_v3";
+    let tempSheet = ss.getSheetByName(tempSheetName);
+    if (tempSheet) ss.deleteSheet(tempSheet);
+    tempSheet = ss.insertSheet(tempSheetName).hideSheet();
 
     try {
         const DC = CONFIG.DASHBOARD_CHARTING;
@@ -423,17 +404,26 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
         // --- Helper to write feedback message on the dashboard ---
         const setChartPlaceholder = (anchorRow, title, message) => {
             const range = sheet.getRange(anchorRow, DL.CHART_ANCHOR_COL, 2, 4);
-            range.clearContent().merge()
-                 .setValue(`${title}\n\n${message}`)
-                 .setVerticalAlignment("middle").setHorizontalAlignment("center")
-                 .setFontColor("#9E9E9E").setFontStyle("italic").setBackground("#F5F5F5")
+            range.clearContent();
+            range.merge();
+            range.setValue(`${title}\n\n${message}`)
+                 .setVerticalAlignment("middle")
+                 .setHorizontalAlignment("center")
+                 .setFontColor("#9E9E9E") // Grey color for placeholder
+                 .setFontStyle("italic")
+                 .setBackground("#F5F5F5")
                  .setBorder(true, true, true, true, null, null, "#E0E0E0", SpreadsheetApp.BorderStyle.DASHED);
         };
 
-        // --- Generic Chart Creation Function using DataTable ---
-        const createChart = (title, dataTable, colors, anchorRow) => {
+        // --- Generic Chart Creation Function ---
+        const createChart = (title, data, headers, colors, anchorRow) => {
+            tempSheet.clearContents();
+            tempSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+            tempSheet.getRange(2, 1, data.length, headers.length).setValues(data);
+            const dataRange = tempSheet.getRange(1, 1, data.length + 1, headers.length);
+
             const chart = sheet.newChart().asColumnChart()
-                .setDataTable(dataTable)
+                .addRange(dataRange)
                 .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
                 .setNumHeaders(1)
                 .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_ROWS)
@@ -460,26 +450,31 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
 
         const formatDateForLog = (date) => Utilities.formatDate(date, timeZone, "yyyy-MM-dd");
 
-        // --- Data Filtering and DataTable Construction ---
+        // --- Data Filtering using Date Objects ---
         const combinedData = months.map((month, i) => ({
             month: month,
             monthLabel: Utilities.formatDate(month, timeZone, "MMM yyyy"),
-            ...dashboardData[i]
+            overdue: dashboardData[i][2],
+            upcoming: dashboardData[i][1],
+            total: dashboardData[i][0]
         }));
 
-        const pastData = combinedData.filter(d => d.month >= pastStartDate && d.month < today);
-        const upcomingData = combinedData.filter(d => d.month >= today && d.month < upcomingEndDate);
+        const pastData = combinedData.filter(d => d.month >= pastStartDate && d.month < today)
+                                     .map(d => [d.monthLabel, d.overdue, d.total]);
+
+        const upcomingData = combinedData.filter(d => d.month >= today && d.month < upcomingEndDate)
+                                         .map(d => [d.monthLabel, d.upcoming, d.total]);
 
         // --- Chart Generation ---
         const pastChartTitle = `Past ${DC.PAST_MONTHS_COUNT} Months: Overdue vs. Total`;
         if (pastData.length > 0) {
-            const dataTable = Charts.newDataTable()
-                .addColumn(Charts.ColumnType.STRING, 'Month')
-                .addColumn(Charts.ColumnType.NUMBER, 'Overdue')
-                .addColumn(Charts.ColumnType.NUMBER, 'Total');
-            pastData.forEach(d => dataTable.addRow([d.monthLabel, d.overdue, d.total]));
-
-            createChart(pastChartTitle, dataTable.build(), [DF.overdue, DF.total], DL.CHART_START_ROW);
+            createChart(
+                pastChartTitle,
+                pastData,
+                ['Month', 'Overdue', 'Total'],
+                [DF.overdue, DF.total],
+                DL.CHART_START_ROW
+            );
         } else {
             const logMsg = `Skipping 'Past Months' chart: No projects found with deadlines between ${formatDateForLog(pastStartDate)} and ${formatDateForLog(today)}.`;
             Logger.log(logMsg);
@@ -488,13 +483,13 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
 
         const upcomingChartTitle = `Next ${DC.UPCOMING_MONTHS_COUNT} Months: Upcoming vs. Total`;
         if (upcomingData.length > 0) {
-            const dataTable = Charts.newDataTable()
-                .addColumn(Charts.ColumnType.STRING, 'Month')
-                .addColumn(Charts.ColumnType.NUMBER, 'Upcoming')
-                .addColumn(Charts.ColumnType.NUMBER, 'Total');
-            upcomingData.forEach(d => dataTable.addRow([d.monthLabel, d.upcoming, d.total]));
-
-            createChart(upcomingChartTitle, dataTable.build(), [DF.upcoming, DF.total], DL.CHART_START_ROW + DC.ROW_SPACING);
+            createChart(
+                upcomingChartTitle,
+                upcomingData,
+                ['Month', 'Upcoming', 'Total'],
+                [DF.upcoming, DF.total],
+                DL.CHART_START_ROW + DC.ROW_SPACING
+            );
         } else {
             const logMsg = `Skipping 'Upcoming Months' chart: No projects found with deadlines between ${formatDateForLog(today)} and ${formatDateForLog(upcomingEndDate)}.`;
             Logger.log(logMsg);
@@ -504,5 +499,27 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     } catch (e) {
         const errorMessage = `A critical error occurred while creating dashboard charts. This can be due to issues with chart data ranges or invalid chart options in CONFIG. Error: ${e.message}`;
         Logger.log(`${errorMessage}\nStack: ${e.stack}`);
+    } finally {
+        if (ss.getSheetByName(tempSheetName)) {
+            ss.deleteSheet(tempSheet);
+        }
     }
+}
+
+/**
+ * Generates an array of Date objects, representing the first day of each month
+ * between a specified start and end date (inclusive).
+ *
+ * @param {Date} startDate The first month to include in the list.
+ * @param {Date} endDate The last month to include in the list.
+ * @returns {Date[]} An array of Date objects.
+ */
+function generateMonthList(startDate, endDate) {
+    const months = [];
+    let currentDate = new Date(startDate.getTime());
+    while (currentDate <= endDate) {
+        months.push(new Date(currentDate));
+        currentDate.setMonth(currentDate.getMonth() + 1);
+    }
+    return months;
 }
