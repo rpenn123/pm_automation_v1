@@ -297,7 +297,7 @@ function applyDashboardFormatting(sheet, numDataRows) {
   const dataRange = sheet.getRange(2, 1, numDataRows, 5);
 
   // Apply banding
-  dataRange.applyRowBanding(SpreadsheetApp.RowBandingTheme.LIGHT_GREY)
+  dataRange.applyRowBanding() // Apply default banding theme
            .setHeaderRow(null) // No header color from banding
            .setFirstRowColor(DF.BANDING_COLOR_ODD)
            .setSecondRowColor(DF.BANDING_COLOR_EVEN);
