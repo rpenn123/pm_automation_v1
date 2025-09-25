@@ -108,24 +108,6 @@ function getMonthKeyPadded(d) {
   return `${y}-${m}`;
 }
 
-/**
- * Generates an array of Date objects, representing the first day of each month
- * between a specified start and end date (inclusive).
- *
- * @param {Date} startDate The first month to include in the list.
- * @param {Date} endDate The last month to include in the list.
- * @returns {Date[]} An array of Date objects.
- */
-function generateMonthList(startDate, endDate) {
-    const months = [];
-    let currentDate = new Date(startDate.getTime());
-    while (currentDate <= endDate) {
-        months.push(new Date(currentDate));
-        currentDate.setMonth(currentDate.getMonth() + 1);
-    }
-    return months;
-}
-
 // =================================================================
 // ==================== SHEET UTILITIES ============================
 // =================================================================
