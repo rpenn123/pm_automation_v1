@@ -46,12 +46,12 @@ const CONFIG = {
   UPCOMING_COLS: {
     PROJECT_NAME: 1,       // A
     CONSTRUCTION_START: 2, // B
-    INSTALL_DATE: 3,       // C
-    DEADLINE: 4,           // D
-    PROGRESS: 5,           // E
-    EQUIPMENT: 6,          // F
-    PERMITS: 7,            // G
-    CONSTRUCTION: 8,       // H
+    DEADLINE: 3,           // C
+    PROGRESS: 4,           // D
+    EQUIPMENT: 5,          // E
+    PERMITS: 6,            // F
+    CONSTRUCTION: 7,       // G
+    // Column H ("Tr") is intentionally unmapped as it's not part of any automation.
     LOCATION: 9,           // I
     NOTES: 10,             // J
   },
