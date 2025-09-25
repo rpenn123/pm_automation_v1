@@ -5,7 +5,10 @@
  */
 
 /**
- * Creates the custom menu when the spreadsheet opens.
+ * A simple trigger that runs when the spreadsheet is opened. It creates a custom menu
+ * in the UI for users to interact with the script's main functions.
+ *
+ * @param {object} e The event object passed by the `onOpen` simple trigger.
  */
 function onOpen(e) {
   SpreadsheetApp.getUi()
@@ -17,11 +20,19 @@ function onOpen(e) {
     .addToUi();
 }
 
-// Wrappers are used to ensure the global scope is correctly initialized when called from the menu.
+/**
+ * A wrapper function to call `updateDashboard` from the custom menu.
+ * This is a best practice in Apps Script to ensure the global scope is correctly
+ * handled when a function is called from a UI element.
+ */
 function updateDashboard_wrapper() {
   updateDashboard();
 }
 
+/**
+ * A wrapper function to call `initializeLastEditFormulas` from the custom menu.
+ * It also displays an alert to the user upon completion.
+ */
 function initializeLastEditFormulas_wrapper() {
   initializeLastEditFormulas();
    SpreadsheetApp.getUi().alert("Initialization complete. Formulas applied to existing rows.");
@@ -29,10 +40,12 @@ function initializeLastEditFormulas_wrapper() {
 
 
 /**
- * One-time setup routine.
- * - Ensures installable onEdit trigger exists.
- * - Ensures Last Edit columns exist on key sheets.
- * - Ensures external log workbook and current month tab (with fallback).
+ * The main, one-time setup routine for the entire project. This function is called from the custom menu
+ * and performs the following critical setup steps:
+ * 1. Installs the installable `onEdit` trigger required for all automations.
+ * 2. Ensures the "Last Edit" tracking columns are present on all configured sheets.
+ * 3. Initializes the external logging system by creating the log spreadsheet and the current month's log sheet.
+ * It provides user feedback via UI alerts for both success and failure.
  */
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -61,7 +74,13 @@ function setup() {
   }
 }
 
-/** Installs the required onEdit trigger if it doesn't exist. */
+/**
+ * Idempotently installs the required installable `onEdit` trigger for the spreadsheet.
+ * It first checks if a trigger for the `onEdit` function already exists. If not, it creates one.
+ * This prevents the creation of duplicate triggers.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to which the trigger will be attached.
+ */
 function installOnEditTrigger(ss) {
   const triggers = ScriptApp.getProjectTriggers();
   const exists = triggers.some(t => 

@@ -5,9 +5,13 @@
  */
 
 /**
- * Main onEdit trigger. Must be installed via Setup.gs.
- * Handles routing of edits to the appropriate synchronization or transfer handlers.
- * @param {GoogleAppsScript.Events.SheetsOnEdit} e
+ * The main `onEdit` function, which serves as the entry point for all sheet automations.
+ * It is designed to be installed as an installable trigger via `Setup.gs`.
+ * The function includes performance optimizations to exit early for irrelevant edits.
+ * It uses a rule-based routing system to delegate the event to the appropriate handler
+ * based on the sheet and column that were edited.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The event object passed by the onEdit trigger.
  */
 function onEdit(e) {
   if (!e || !e.range) return;
@@ -107,7 +111,14 @@ function onEdit(e) {
 // ==================== SYNC HANDLERS ==============================
 // =================================================================
 
-/** Forecasting[Progress] edit: sync to Upcoming, and trigger Framing if "In Progress". */
+/**
+ * Handles an edit to the 'Progress' column in the 'Forecasting' sheet.
+ * This is a composite handler that performs two actions:
+ * 1. Synchronizes the new 'Progress' value to the corresponding project in the 'Upcoming' sheet.
+ * 2. If the new value is "In Progress", it triggers a data transfer to the 'Framing' sheet.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ */
 function handleSyncAndPotentialFramingTransfer(e) {
   const sheet = e.range.getSheet();
   const FC = CONFIG.FORECASTING_COLS;
@@ -126,7 +137,13 @@ function handleSyncAndPotentialFramingTransfer(e) {
   }
 }
 
-/** Upcoming[Progress] edit: sync back to Forecasting. */
+/**
+ * Handles an edit to the 'Progress' column in the 'Upcoming' sheet.
+ * This handler synchronizes the new 'Progress' value back to the
+ * corresponding project in the 'Forecasting' sheet.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ */
 function triggerSyncToForecasting(e) {
   const sheet = e.range.getSheet();
   const UP = CONFIG.UPCOMING_COLS;
@@ -138,7 +155,16 @@ function triggerSyncToForecasting(e) {
   }
 }
 
-/** SYNC Logic: Forecasting -> Upcoming. */
+/**
+ * Synchronizes the 'Progress' status for a given project from the 'Forecasting' sheet to the 'Upcoming' sheet.
+ * It uses a script lock to prevent race conditions and includes a crucial check to avoid infinite
+ * recursive loops by only writing the new value if it's different from the existing value.
+ *
+ * @param {string} projectName The name of the project to sync.
+ * @param {*} newValue The new value of the 'Progress' cell.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event object for logging context.
+ */
 function syncProgressToUpcoming(projectName, newValue, ss, eCtx) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
@@ -188,7 +214,15 @@ function syncProgressToUpcoming(projectName, newValue, ss, eCtx) {
   }
 }
 
-/** SYNC Logic: Upcoming -> Forecasting. */
+/**
+ * Synchronizes the 'Progress' status for a given project from the 'Upcoming' sheet back to the 'Forecasting' sheet.
+ * This completes the two-way sync. It uses a script lock and a value check to prevent infinite loops.
+ *
+ * @param {string} projectName The name of the project to sync.
+ * @param {*} newValue The new value of the 'Progress' cell.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event object for logging context.
+ */
 function syncProgressToForecasting(projectName, newValue, ss, eCtx) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
@@ -240,7 +274,13 @@ function syncProgressToForecasting(projectName, newValue, ss, eCtx) {
 // =================================================================
 // These functions define the configuration for specific transfers and pass them to the generic TransferEngine.
 
-/** Transfer Definition: Forecasting (Permits Approved) -> Upcoming */
+/**
+ * Defines and triggers the transfer of a project row from 'Forecasting' to 'Upcoming'.
+ * This transfer is initiated when the 'Permits' column in 'Forecasting' is set to "approved".
+ * It constructs a configuration object and passes it to the `executeTransfer` engine.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ */
 function triggerUpcomingTransfer(e) {
   const FC = CONFIG.FORECASTING_COLS;
   const UP = CONFIG.UPCOMING_COLS;
@@ -277,7 +317,13 @@ function triggerUpcomingTransfer(e) {
   executeTransfer(e, config);
 }
 
-/** Transfer Definition: Forecasting (Delivered TRUE) -> Inventory */
+/**
+ * Defines and triggers the transfer of a project row from 'Forecasting' to 'Inventory_Elevators'.
+ * This transfer is initiated when the 'Delivered' column in 'Forecasting' is checked (TRUE).
+ * It constructs a configuration object and passes it to the `executeTransfer` engine.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ */
 function triggerInventoryTransfer(e) {
   const FC = CONFIG.FORECASTING_COLS;
   const INV = CONFIG.INVENTORY_COLS;
@@ -301,7 +347,14 @@ function triggerInventoryTransfer(e) {
   executeTransfer(e, config);
 }
 
-/** Transfer Definition: Forecasting (In Progress) -> Framing */
+/**
+ * Defines and triggers the transfer of a project row from 'Forecasting' to 'Framing'.
+ * This transfer is initiated when the 'Progress' column in 'Forecasting' is set to "In Progress".
+ * It uses a compound key for duplicate checking to allow the same project to be added
+ * if its deadline changes.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ */
 function triggerFramingTransfer(e) {
   const FC = CONFIG.FORECASTING_COLS;
   const FR = CONFIG.FRAMING_COLS;

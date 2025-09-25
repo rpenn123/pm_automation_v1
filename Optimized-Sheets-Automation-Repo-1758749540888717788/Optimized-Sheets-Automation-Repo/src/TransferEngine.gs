@@ -6,9 +6,18 @@
  */
 
 /**
- * Generic transfer executor.
- * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
- * @param {object} config Configuration object for the transfer (see Automations.gs for definitions).
+ * Executes a generic, configuration-driven data transfer from a source row to a destination sheet.
+ * This function is the core of the transfer mechanism, designed to be called by trigger handlers in `Automations.gs`.
+ * It handles script locking, data reading, duplicate checking, column mapping, and optional post-transfer actions like sorting.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object passed from the trigger.
+ * @param {object} config The configuration object that defines the transfer.
+ * @param {string} config.transferName A descriptive name for the transfer, used for logging.
+ * @param {string} config.destinationSheetName The name of the sheet to which data will be transferred.
+ * @param {number[]} config.sourceColumnsNeeded An array of 1-based column indices required from the source row.
+ * @param {Object<number, number>} config.destinationColumnMapping An object mapping source column indices to destination column indices.
+ * @param {object} [config.duplicateCheckConfig] Optional configuration for preventing duplicate entries.
+ * @param {object} [config.postTransferActions] Optional configuration for actions to perform after a successful transfer, such as sorting.
  */
 function executeTransfer(e, config) {
   const lock = LockService.getScriptLock();
@@ -155,9 +164,21 @@ function executeTransfer(e, config) {
   }
 }
 
-/** 
- * Duplicate check helper. Determines if a matching record exists in the destination sheet.
- * Supports simple Project Name checks or compound key checks.
+/**
+ * Checks for a duplicate entry in the destination sheet based on a flexible keying strategy.
+ * It can check for duplicates based on a simple project name or a compound key (e.g., Project Name + Deadline).
+ * This function builds a unique key from the source row data and efficiently scans the destination sheet for a matching key.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} destinationSheet The sheet to scan for duplicates.
+ * @param {string} projectName The project name from the source row.
+ * @param {any[]} sourceRowData The array of values from the source row.
+ * @param {number} sourceReadWidth The number of columns read from the source sheet to ensure no out-of-bounds access.
+ * @param {object} dupConfig The configuration for the duplicate check.
+ * @param {number} dupConfig.projectNameDestCol The 1-based column index of the project name in the destination sheet.
+ * @param {number[]} [dupConfig.compoundKeySourceCols] Optional array of 1-based source column indices for a compound key.
+ * @param {number[]} [dupConfig.compoundKeyDestCols] Optional array of 1-based destination column indices for a compound key.
+ * @param {string} [dupConfig.keySeparator="|"] The separator character used for building compound keys.
+ * @returns {boolean} True if a duplicate key is found in the destination sheet, otherwise false.
  */
 function isDuplicateInDestination(destinationSheet, projectName, sourceRowData, sourceReadWidth, dupConfig) {
   const destProjectNameCol = dupConfig.projectNameDestCol;
