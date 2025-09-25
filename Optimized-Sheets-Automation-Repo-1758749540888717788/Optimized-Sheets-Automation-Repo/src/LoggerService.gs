@@ -19,26 +19,47 @@ function notifyError(subjectDetails, error, ss) {
   }
 
   try {
-    const subject = `Critical Error in ${appName}: ${subjectDetails}`;
-    let body = `A critical error occurred in the ${appName} script.\n\n`;
-    body += `Timestamp: ${new Date().toISOString()}\n`;
+    const subject = `[Error] ${appName}: ${subjectDetails}`;
+    const timestamp = new Date();
 
     // Determine the spreadsheet context
     const activeSS = ss || SpreadsheetApp.getActiveSpreadsheet();
-    if (activeSS && activeSS.getId) {
-      body += `Spreadsheet: ${activeSS.getName()} (${activeSS.getId()})\n\n`;
-    } else {
-      body += `Spreadsheet: Unknown (could not determine active spreadsheet)\n\n`;
-    }
+    const ssName = (activeSS && activeSS.getName) ? activeSS.getName() : "Unknown";
+    const ssId = (activeSS && activeSS.getId) ? activeSS.getId() : "N/A";
+    const ssUrl = (activeSS && activeSS.getUrl) ? activeSS.getUrl() : "#";
 
-    // Format error details
-    body += `Error Message: ${(error && error.message) ? error.message : String(error)}\n\n`;
-    if (error && error.stack) {
-      body += `Stack Trace:\n${error.stack}\n`;
-    }
+    // Format error details for HTML and plain text
+    const errorMessage = (error && error.message) ? error.message : String(error);
+    const stackTrace = (error && error.stack) ? error.stack : "No stack trace available.";
 
-    // Send email (requires authorization scope)
-    MailApp.sendEmail({ to: email, subject: subject, body: body, noReply: true });
+    // --- Create HTML Body for better readability ---
+    let htmlBody = `
+      <p>A critical error occurred in the <strong>${appName}</strong> script.</p>
+      <hr>
+      <p><strong>Timestamp:</strong> ${timestamp.toUTCString()}</p>
+      <p><strong>Spreadsheet:</strong> <a href="${ssUrl}">${ssName}</a> (ID: ${ssId})</p>
+      <p><strong>Error Message:</strong></p>
+      <p style="color: red; font-family: monospace; background-color: #f5f5f5; padding: 10px; border-radius: 4px;">${errorMessage}</p>
+      <p><strong>Stack Trace:</strong></p>
+      <pre style="font-family: monospace; background-color: #f5f5f5; padding: 10px; border-radius: 4px;">${stackTrace}</pre>
+    `;
+
+    // --- Create Plain Text Fallback Body ---
+    let body = `A critical error occurred in the ${appName} script.\n\n` +
+               `Timestamp: ${timestamp.toISOString()}\n` +
+               `Spreadsheet: ${ssName} (${ssId})\n` +
+               `URL: ${ssUrl}\n\n` +
+               `Error Message: ${errorMessage}\n\n` +
+               `Stack Trace:\n${stackTrace}\n`;
+
+    // Send email with HTML body and plain text fallback
+    MailApp.sendEmail({
+      to: email,
+      subject: subject,
+      body: body,
+      htmlBody: htmlBody,
+      noReply: true
+    });
     Logger.log(`Sent error email to ${email}`);
   } catch (mailError) {
     Logger.log(`CRITICAL: Failed to send error email: ${mailError}`);
