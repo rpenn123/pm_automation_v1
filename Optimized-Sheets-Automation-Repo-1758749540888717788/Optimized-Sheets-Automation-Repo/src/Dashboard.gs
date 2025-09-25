@@ -41,7 +41,7 @@ function updateDashboard() {
     Logger.log(`Processing complete. Found ${allOverdueItems.length} overdue items and ${missingDeadlinesCount} rows with missing deadlines.`);
 
     // 3. Populate Overdue Details
-    populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders);
+    populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems);
     
     // 4. Prepare and Populate Dashboard
     clearAndResizeSheet(dashboardSheet, CONFIG.DASHBOARD_LAYOUT.FIXED_ROW_COUNT);
@@ -96,7 +96,7 @@ function updateDashboard() {
       missingCell.setFontWeight("bold");
 
       // 5. Apply Formatting
-      applyDashboardFormatting(dashboardSheet, numDataRows, dashboardData);
+      applyDashboardFormatting(dashboardSheet, numDataRows);
 
       // 6. Generate Charts
       if (CONFIG.DASHBOARD_CHARTING.ENABLED) {
@@ -134,7 +134,10 @@ function readForecastingData(forecastSheet) {
     const dataRange = forecastSheet.getDataRange();
     const numRows = dataRange.getNumRows();
     const forecastingHeaders = numRows > 0 ? forecastSheet.getRange(1, 1, 1, dataRange.getNumColumns()).getValues()[0] : [];
-    if (numRows <= 1) return { forecastingValues: [], forecastingHeaders };
+    if (numRows <= 1) {
+      Logger.log("'Forecasting' sheet is empty or contains only headers. No data to process.");
+      return { forecastingValues: [], forecastingHeaders };
+    }
     
     // Determine columns needed based on CONFIG (1-based indices)
     const colIndices = Object.values(CONFIG.FORECASTING_COLS);
@@ -234,43 +237,55 @@ function processForecastingData(forecastingValues) {
 // =================================================================
 
 /**
- * Clears and populates the 'Overdue Details' sheet with the full data for all overdue projects.
- * This provides a "drill-down" view for the overdue counts on the main dashboard.
+ * Clears and populates the 'Overdue Details' sheet with a focused subset of data for all overdue projects.
+ * This provides a cleaner "drill-down" view by only showing columns specified in `CONFIG.OVERDUE_DETAILS_DISPLAY_KEYS`.
+ * This approach prevents column mismatch errors by building the data array with an explicit structure.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} overdueDetailsSheet The destination sheet object.
- * @param {Array<Array<*>>} allOverdueItems A 2D array of the data rows for overdue projects.
- * @param {Array<string>} forecastingHeaders The header row from the 'Forecasting' sheet to use for the details sheet.
+ * @param {Array<Array<*>>} allOverdueItems A 2D array of the full data rows for overdue projects.
  */
-function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders) {
+function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems) {
   try {
-    const numRows = allOverdueItems.length;
-    const numCols = forecastingHeaders.length;
+    // 1. Get the desired column keys and map them to 0-based indices
+    const displayKeys = CONFIG.OVERDUE_DETAILS_DISPLAY_KEYS;
+    const colIndices = displayKeys.map(key => CONFIG.FORECASTING_COLS[key] - 1);
 
-    // Clear previous data and formatting
+    // 2. Create the new, focused headers
+    const newHeaders = displayKeys.map(key => key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+
+    // 3. Build the new data array with only the required columns
+    const overdueDataSubset = allOverdueItems.map(fullRow =>
+      colIndices.map(colIdx => fullRow[colIdx] !== undefined ? fullRow[colIdx] : "")
+    );
+
+    const numRows = overdueDataSubset.length;
+    const numCols = newHeaders.length;
+
+    // 4. Efficiently clear and resize the sheet
     overdueDetailsSheet.clear();
     if (overdueDetailsSheet.getMaxRows() > 1) {
       overdueDetailsSheet.deleteRows(2, overdueDetailsSheet.getMaxRows() - 1);
     }
-    if (overdueDetailsSheet.getMaxColumns() > numCols) {
+     if (overdueDetailsSheet.getMaxColumns() > numCols) {
         overdueDetailsSheet.deleteColumns(numCols + 1, overdueDetailsSheet.getMaxColumns() - numCols);
     }
 
-    // Write headers
-    overdueDetailsSheet.getRange(1, 1, 1, numCols).setValues([forecastingHeaders]).setFontWeight("bold");
+    // 5. Write headers and data in two batches
+    overdueDetailsSheet.getRange(1, 1, 1, numCols).setValues([newHeaders]).setFontWeight("bold");
 
     if (numRows > 0) {
-      // Ensure enough rows exist for the data
       if (overdueDetailsSheet.getMaxRows() < numRows + 1) {
         overdueDetailsSheet.insertRowsAfter(1, numRows);
       }
-      // Write data
-      overdueDetailsSheet.getRange(2, 1, numRows, numCols).setValues(allOverdueItems);
+      overdueDetailsSheet.getRange(2, 1, numRows, numCols).setValues(overdueDataSubset);
     }
 
-    Logger.log(`Populated Overdue Details sheet with ${numRows} items.`);
+    Logger.log(`Successfully populated 'Overdue Details' sheet with ${numRows} items and ${numCols} columns.`);
+
   } catch (e) {
-    Logger.log(`ERROR in populateOverdueDetailsSheet: ${e.message}`);
-    // No need to throw here, as dashboard can still partially function
+    const errorMessage = `Failed to populate 'Overdue Details' sheet. This can happen if 'OVERDUE_DETAILS_DISPLAY_KEYS' in CONFIG contains an invalid key. Error: ${e.message}`;
+    Logger.log(`ERROR in populateOverdueDetailsSheet: ${errorMessage}\nStack: ${e.stack}`);
+    // Do not throw, as the main dashboard can still be generated.
   }
 }
 
@@ -462,7 +477,8 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
         }
 
     } catch (e) {
-        Logger.log(`A critical error occurred in createOrUpdateDashboardCharts: ${e.message}\n${e.stack}`);
+        const errorMessage = `A critical error occurred while creating dashboard charts. This can be due to issues with chart data ranges or invalid chart options in CONFIG. Error: ${e.message}`;
+        Logger.log(`${errorMessage}\nStack: ${e.stack}`);
     } finally {
         if (ss.getSheetByName(tempSheetName)) {
             ss.deleteSheet(tempSheet);
