@@ -298,7 +298,7 @@ function applyDashboardFormatting(sheet, numDataRows) {
 
   // Apply banding
   dataRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY)
-           .setHeaderRow(null) // No header color from banding
+           .setHeaderRowColor(null) // No header color from banding
            .setFirstRowColor(DF.BANDING_COLOR_ODD)
            .setSecondRowColor(DF.BANDING_COLOR_EVEN);
 
