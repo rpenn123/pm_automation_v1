@@ -12,6 +12,7 @@
  * based on the sheet and column that were edited.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The event object passed by the onEdit trigger.
+ * @returns {void}
  */
 function onEdit(e) {
   if (!e || !e.range) return;
@@ -118,6 +119,7 @@ function onEdit(e) {
  * 2. If the new value is "In Progress", it triggers a data transfer to the 'Framing' sheet.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ * @returns {void}
  */
 function handleSyncAndPotentialFramingTransfer(e) {
   const sheet = e.range.getSheet();
@@ -143,6 +145,7 @@ function handleSyncAndPotentialFramingTransfer(e) {
  * corresponding project in the 'Forecasting' sheet.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ * @returns {void}
  */
 function triggerSyncToForecasting(e) {
   const sheet = e.range.getSheet();
@@ -164,6 +167,7 @@ function triggerSyncToForecasting(e) {
  * @param {*} newValue The new value of the 'Progress' cell.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
  * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event object for logging context.
+ * @returns {void}
  */
 function syncProgressToUpcoming(projectName, newValue, ss, eCtx) {
   const lock = LockService.getScriptLock();
@@ -222,6 +226,7 @@ function syncProgressToUpcoming(projectName, newValue, ss, eCtx) {
  * @param {*} newValue The new value of the 'Progress' cell.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
  * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event object for logging context.
+ * @returns {void}
  */
 function syncProgressToForecasting(projectName, newValue, ss, eCtx) {
   const lock = LockService.getScriptLock();
@@ -280,6 +285,7 @@ function syncProgressToForecasting(projectName, newValue, ss, eCtx) {
  * It constructs a configuration object and passes it to the `executeTransfer` engine.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ * @returns {void}
  */
 function triggerUpcomingTransfer(e) {
   const FC = CONFIG.FORECASTING_COLS;
@@ -323,6 +329,7 @@ function triggerUpcomingTransfer(e) {
  * It constructs a configuration object and passes it to the `executeTransfer` engine.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ * @returns {void}
  */
 function triggerInventoryTransfer(e) {
   const FC = CONFIG.FORECASTING_COLS;
@@ -354,6 +361,7 @@ function triggerInventoryTransfer(e) {
  * if its deadline changes.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
+ * @returns {void}
  */
 function triggerFramingTransfer(e) {
   const FC = CONFIG.FORECASTING_COLS;

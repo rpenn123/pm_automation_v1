@@ -17,7 +17,15 @@
  * @param {number[]} config.sourceColumnsNeeded An array of 1-based column indices required from the source row.
  * @param {Object<number, number>} config.destinationColumnMapping An object mapping source column indices to destination column indices.
  * @param {object} [config.duplicateCheckConfig] Optional configuration for preventing duplicate entries.
- * @param {object} [config.postTransferActions] Optional configuration for actions to perform after a successful transfer, such as sorting.
+ * @param {boolean} [config.duplicateCheckConfig.checkEnabled=true] Whether to perform a duplicate check.
+ * @param {number} config.duplicateCheckConfig.projectNameSourceCol The 1-based column index of the project name in the source sheet.
+ * @param {number} config.duplicateCheckConfig.projectNameDestCol The 1-based column index of the project name in the destination sheet.
+ * @param {number[]} [config.duplicateCheckConfig.compoundKeySourceCols] Optional array of additional source column indices to create a compound key for duplicate checking.
+ * @param {number[]} [config.duplicateCheckConfig.compoundKeyDestCols] Optional array of additional destination column indices for the compound key.
+ * @param {object} [config.postTransferActions] Optional configuration for actions to perform after a successful transfer.
+ * @param {boolean} [config.postTransferActions.sort=false] Whether to sort the destination sheet after the transfer.
+ * @param {number} config.postTransferActions.sortColumn The 1-based column index to sort by.
+ * @param {boolean} config.postTransferActions.sortAscending Whether to sort in ascending order.
  */
 function executeTransfer(e, config) {
   const lock = LockService.getScriptLock();

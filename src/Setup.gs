@@ -9,6 +9,7 @@
  * in the UI for users to interact with the script's main functions.
  *
  * @param {object} e The event object passed by the `onOpen` simple trigger.
+ * @returns {void}
  */
 function onOpen(e) {
   SpreadsheetApp.getUi()
@@ -24,6 +25,7 @@ function onOpen(e) {
  * A wrapper function to call `updateDashboard` from the custom menu.
  * This is a best practice in Apps Script to ensure the global scope is correctly
  * handled when a function is called from a UI element.
+ * @returns {void}
  */
 function updateDashboard_wrapper() {
   updateDashboard();
@@ -32,6 +34,7 @@ function updateDashboard_wrapper() {
 /**
  * A wrapper function to call `initializeLastEditFormulas` from the custom menu.
  * It also displays an alert to the user upon completion.
+ * @returns {void}
  */
 function initializeLastEditFormulas_wrapper() {
   initializeLastEditFormulas();
@@ -46,6 +49,7 @@ function initializeLastEditFormulas_wrapper() {
  * 2. Ensures the "Last Edit" tracking columns are present on all configured sheets.
  * 3. Initializes the external logging system by creating the log spreadsheet and the current month's log sheet.
  * It provides user feedback via UI alerts for both success and failure.
+ * @returns {void}
  */
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -80,6 +84,7 @@ function setup() {
  * This prevents the creation of duplicate triggers.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to which the trigger will be attached.
+ * @returns {void}
  */
 function installOnEditTrigger(ss) {
   const triggers = ScriptApp.getProjectTriggers();
