@@ -37,7 +37,7 @@ function updateDashboard() {
     populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders);
 
     // 4. Prepare and Populate Dashboard
-    clearAndResizeSheet(dashboardSheet, CONFIG.DASHBOARD_LAYOUT.FIXED_ROW_COUNT);
+    clearAndResizeSheet(dashboardSheet, CONFIG.DASHBOARD_LAYOUT.FIXED_ROW_COUNT, CONFIG.DASHBOARD_LAYOUT.HIDE_COL_END);
     setDashboardHeaders(dashboardSheet); // Updated to handle Year/Month split
     setDashboardHeaderNotes(dashboardSheet);
 
@@ -330,6 +330,10 @@ function applyDashboardFormatting(sheet, numDataRows) {
  */
 function hideDataColumns(sheet) {
     const DL = CONFIG.DASHBOARD_LAYOUT;
+    if (sheet.getMaxColumns() < DL.HIDE_COL_START) {
+        Logger.log(`Skipping hideDataColumns: Sheet only has ${sheet.getMaxColumns()} columns, which is less than the required ${DL.HIDE_COL_START}.`);
+        return;
+    }
     sheet.hideColumns(DL.HIDE_COL_START, DL.HIDE_COL_END - DL.HIDE_COL_START + 1);
 }
 
