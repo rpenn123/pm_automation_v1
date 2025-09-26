@@ -219,6 +219,16 @@ function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
  */
 function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders) {
   try {
+    // FIX: Guard against an empty/invalid source sheet. If there are no headers,
+    // we can't determine columns, leading to a getRange(..., 0) error.
+    if (!forecastingHeaders || forecastingHeaders.length === 0) {
+      overdueDetailsSheet.clear();
+      // Provide feedback on the sheet itself.
+      overdueDetailsSheet.getRange(1, 1).setValue("Source 'Forecasting' sheet is empty or has no header row.");
+      Logger.log("Skipped populating Overdue Details: 'Forecasting' sheet appears to be empty.");
+      return; // Exit the function gracefully.
+    }
+
     const numRows = allOverdueItems.length;
     // FIX: Use the actual data's column count to prevent mismatch errors.
     const numCols = allOverdueItems.length > 0 ? allOverdueItems[0].length : forecastingHeaders.length;
