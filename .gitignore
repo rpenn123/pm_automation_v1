@@ -1,2 +1,5 @@
 # Deployment env swap
 .clasp.json
+
+__old_src_backup_*
+
