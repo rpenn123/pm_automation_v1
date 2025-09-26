@@ -188,3 +188,43 @@ function logAudit(sourceSS, entry) {
     notifyError("Audit logging system failed critically", e, sourceSS);
   }
 }
+
+/**
+ * Sorts all monthly log sheets in the log spreadsheet by timestamp in descending order.
+ * This function is intended to be called by an installable onOpen trigger. It iterates
+ * through all sheets, identifies valid monthly log sheets (named "YYYY-MM"), and sorts
+ * them based on the first column (Timestamp).
+ */
+function sortLogSheetsOnOpen() {
+  try {
+    const logSS = getOrCreateLogSpreadsheet();
+    if (!logSS) {
+      Logger.log("Auto-Sort: Could not retrieve the log spreadsheet. Aborting sort.");
+      return;
+    }
+
+    const sheets = logSS.getSheets();
+    const monthKeyRegex = /^\d{4}-\d{2}$/; // Regex to identify "YYYY-MM" sheet names
+
+    sheets.forEach(sheet => {
+      const sheetName = sheet.getName();
+      // Check if the sheet name matches the monthly log format
+      if (monthKeyRegex.test(sheetName)) {
+        const lastRow = sheet.getLastRow();
+
+        // Only sort if there's more than just a header row
+        if (lastRow > 1) {
+          // Define the range to be sorted, excluding the header row
+          const range = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn());
+          // Sort by the first column (Timestamp) in descending order (newest first)
+          range.sort({ column: 1, ascending: false });
+          Logger.log(`Auto-Sort: Successfully sorted sheet "${sheetName}".`);
+        }
+      }
+    });
+  } catch (e) {
+    // We avoid calling notifyError here to prevent a potential infinite loop if the error
+    // is related to accessing the spreadsheet, which could trigger more logging.
+    Logger.log(`CRITICAL: Auto-Sort for log sheets failed. Error: ${e.message}`);
+  }
+}

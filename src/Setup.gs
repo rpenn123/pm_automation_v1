@@ -56,8 +56,9 @@ function setup() {
   const ui = SpreadsheetApp.getUi();
 
   try {
-    // 1. Installable onEdit trigger
+    // 1. Install triggers
     installOnEditTrigger(ss);
+    installOnOpenTriggerForLogs(ss);
 
     // 2. Create Last Edit columns
     ensureAllLastEditColumns(ss);
@@ -98,5 +99,31 @@ function installOnEditTrigger(ss) {
     Logger.log("Installable onEdit trigger created.");
   } else {
     Logger.log("Installable onEdit trigger already exists.");
+  }
+}
+
+/**
+ * Idempotently installs an `onOpen` trigger for the log sorting function.
+ * It checks if a trigger for `sortLogSheetsOnOpen` already exists to prevent duplicates.
+ * This trigger ensures that the external log spreadsheet is sorted every time the main
+ * project spreadsheet is opened.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to which the trigger will be attached.
+ */
+function installOnOpenTriggerForLogs(ss) {
+  const triggers = ScriptApp.getProjectTriggers();
+  const functionName = "sortLogSheetsOnOpen";
+
+  // Check if a trigger for this function already exists
+  const exists = triggers.some(t =>
+    t.getHandlerFunction() === functionName && t.getEventType() === ScriptApp.EventType.ON_OPEN
+  );
+
+  if (!exists) {
+    // Create the trigger for the specified spreadsheet
+    ScriptApp.newTrigger(functionName).forSpreadsheet(ss).onOpen().create();
+    Logger.log(`Installable onOpen trigger for "${functionName}" created.`);
+  } else {
+    Logger.log(`Installable onOpen trigger for "${functionName}" already exists.`);
   }
 }
