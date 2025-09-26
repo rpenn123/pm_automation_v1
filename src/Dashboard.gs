@@ -14,6 +14,7 @@
  * 4. Clears, resizes, and populates the main 'Dashboard' sheet with monthly summaries and grand totals.
  * 5. Applies all formatting, including colors, number formats, and borders.
  * 6. Generates and embeds summary charts directly into the dashboard.
+ * @returns {void}
  */
 function updateDashboard() {
   const ui = SpreadsheetApp.getUi();
@@ -243,6 +244,7 @@ function processForecastingData(forecastingValues) {
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} overdueDetailsSheet The destination sheet object.
  * @param {Array<Array<*>>} allOverdueItems A 2D array of the full data rows for overdue projects.
+ * @returns {void}
  */
 function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems) {
   try {
@@ -293,6 +295,7 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems) {
  * Sets the static main headers for the dashboard summary table.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
+ * @returns {void}
  */
 function setDashboardHeaders(sheet) {
   const DL = CONFIG.DASHBOARD_LAYOUT;
@@ -323,6 +326,7 @@ function setDashboardHeaders(sheet) {
  * Sets explanatory notes on the dashboard header cells to provide context for each metric.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
+ * @returns {void}
  */
 function setDashboardHeaderNotes(sheet) {
     const DL = CONFIG.DASHBOARD_LAYOUT;
@@ -339,6 +343,7 @@ function setDashboardHeaderNotes(sheet) {
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
  * @param {number} numDataRows The number of data rows (months) being displayed.
+ * @returns {void}
  */
 function applyDashboardFormatting(sheet, numDataRows) {
   const DL = CONFIG.DASHBOARD_LAYOUT;
@@ -369,6 +374,7 @@ function applyDashboardFormatting(sheet, numDataRows) {
  * Hides the temporary data columns that are used as a source for the dashboard charts.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
+ * @returns {void}
  */
 function hideDataColumns(sheet) {
     const DL = CONFIG.DASHBOARD_LAYOUT;
@@ -385,6 +391,7 @@ function hideDataColumns(sheet) {
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The 'Dashboard' sheet object.
  * @param {Date[]} months The full list of month Date objects for the dashboard's time range.
  * @param {Array<Array<number>>} dashboardData The 2D array of summary data corresponding to the months list.
+ * @returns {void}
  */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     // Clean up previous state
