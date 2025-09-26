@@ -25,8 +25,8 @@ This repo contains a Google Apps Script (GAS) codebase synced with a bound Scrip
 > **Note on `rootDir`:** Our `.clasp.*.json` files store the detected code root (that long `Optimized-…/src` path). The deploy scripts auto-detect `appsscript.json` if `rootDir` ever drifts, so pushes don’t break.
 
 ## Daily use
-- **TEST deploy:** double-click `Update.bat` (or `.\Update.bat` in PowerShell)
-- **PROD deploy:** double-click `Update-Prod.bat`
+- **TEST deploy:** double-click `update_test.bat` (or `.\update_test.bat` in PowerShell)
+- **PROD deploy:** double-click `update_production.bat`
 - After deploy: open the target Sheet → refresh → **Project Actions → Run Full Setup** if scopes/triggers changed
 
 ## Smoke test (2 minutes)
@@ -53,3 +53,4 @@ The workflow `.github/workflows/validate-deploy.yml` runs `scripts/validate-depl
 4. Add `docs/RELEASE.md` with the smoke-test checklist above.
 
 — Owner: Ryan (rpenn@mobility123.com)
+
