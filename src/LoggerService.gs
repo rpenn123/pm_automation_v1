@@ -182,6 +182,13 @@ function logAudit(sourceSS, entry) {
     // Append row efficiently
     sheet.appendRow(newRow);
 
+    // Sort the sheet to keep the newest entries at the top
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) { // Check if there is data to sort (beyond the header)
+      const range = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn());
+      range.sort({ column: 1, ascending: false }); // Sort by timestamp descending
+    }
+
   } catch (e) {
     Logger.log(`CRITICAL: Audit logging failure: ${e}`);
     // If the logging system itself fails, attempt to notify.
