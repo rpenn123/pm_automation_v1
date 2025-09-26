@@ -99,22 +99,23 @@ const CONFIG = {
 
   // --- Dashboard Layout (1-indexed) ---
   DASHBOARD_LAYOUT: {
-    MONTH_COL: 1,       // A
-    TOTAL_COL: 2,       // B
-    UPCOMING_COL: 3,    // C
-    OVERDUE_COL: 4,     // D
-    APPROVED_COL: 5,    // E
-    GT_UPCOMING_COL: 6, // F
-    GT_OVERDUE_COL: 7,  // G
-    GT_TOTAL_COL: 8,    // H
-    GT_APPROVED_COL: 9, // I
-    MISSING_DEADLINE_CELL: "L1",
+    YEAR_COL: 1,        // A
+    MONTH_COL: 2,       // B
+    TOTAL_COL: 3,       // C
+    UPCOMING_COL: 4,    // D
+    OVERDUE_COL: 5,     // E
+    APPROVED_COL: 6,    // F
+    GT_UPCOMING_COL: 7, // G
+    GT_OVERDUE_COL: 8,  // H
+    GT_TOTAL_COL: 9,    // I
+    GT_APPROVED_COL: 10,// J
+    MISSING_DEADLINE_CELL: "M1",
     FIXED_ROW_COUNT: 150,
-    HIDE_COL_START: 11, // K
-    HIDE_COL_END: 26,   // Z
+    HIDE_COL_START: 12, // L
+    HIDE_COL_END: 27,   // AA
     CHART_START_ROW: 2,
-    CHART_ANCHOR_COL: 10, // J
-    TEMP_DATA_START_COL: 12 // L
+    CHART_ANCHOR_COL: 11, // K
+    TEMP_DATA_START_COL: 13 // M
   },
 
   // --- Formatting (SLEEK THEME) ---
