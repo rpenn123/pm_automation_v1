@@ -188,14 +188,15 @@ function getOrCreateSheet(ss, sheetName) {
 }
 
 /**
- * Clears and prepares a sheet by ensuring it has a fixed number of rows.
- * Deletes excess rows or adds missing rows to match a predefined count.
+ * REFACTORED: Clears and prepares a sheet by ensuring it has a fixed number of rows AND columns.
+ * Deletes or adds rows/columns to match the predefined counts.
  * This is crucial for maintaining a consistent layout on sheets like the Dashboard.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to prepare.
  * @param {number} requiredRowCount The exact number of rows the sheet should have.
+ * @param {number} [requiredColCount] Optional. The exact number of columns the sheet should have.
  */
-function clearAndResizeSheet(sheet, requiredRowCount) {
+function clearAndResizeSheet(sheet, requiredRowCount, requiredColCount) {
   if (!sheet || typeof requiredRowCount !== 'number' || requiredRowCount < 1) {
     throw new Error("Invalid parameters provided to clearAndResizeSheet.");
   }
@@ -209,6 +210,16 @@ function clearAndResizeSheet(sheet, requiredRowCount) {
     sheet.insertRowsAfter(maxRows, requiredRowCount - maxRows);
   } else if (maxRows > requiredRowCount) {
     sheet.deleteRows(requiredRowCount + 1, maxRows - requiredRowCount);
+  }
+
+  // NEW: Adjust column count if a number is provided.
+  if (typeof requiredColCount === 'number' && requiredColCount > 0) {
+    const maxCols = sheet.getMaxColumns();
+    if (maxCols < requiredColCount) {
+      sheet.insertColumnsAfter(maxCols, requiredColCount - maxCols);
+    } else if (maxCols > requiredColCount) {
+      sheet.deleteColumns(requiredColCount + 1, maxCols - requiredColCount);
+    }
   }
 }
 

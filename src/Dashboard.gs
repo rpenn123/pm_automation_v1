@@ -37,7 +37,7 @@ function updateDashboard() {
     populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders);
 
     // 4. Prepare and Populate Dashboard
-    clearAndResizeSheet(dashboardSheet, CONFIG.DASHBOARD_LAYOUT.FIXED_ROW_COUNT);
+    clearAndResizeSheet(dashboardSheet, CONFIG.DASHBOARD_LAYOUT.FIXED_ROW_COUNT, CONFIG.DASHBOARD_LAYOUT.HIDE_COL_END);
     setDashboardHeaders(dashboardSheet); // Updated to handle Year/Month split
     setDashboardHeaderNotes(dashboardSheet);
 
