@@ -193,27 +193,36 @@ function isDuplicateInDestination(destinationSheet, projectName, sourceRowData, 
   const lastDestRow = destinationSheet.getLastRow();
   if (lastDestRow < 2) return false; // No data rows exist
 
-  // 1. Build the key we are checking against (from the source data)
-  let keyToCheck = projectName.trim().toLowerCase();
   const sep = dupConfig.keySeparator || "|";
 
-  // Add compound keys if configured and lengths match
+  // Create pairs of source/destination columns for the compound key and sort them
+  // to ensure the key is built in a deterministic order.
+  const keyPairs = [];
   if (dupConfig.compoundKeySourceCols && dupConfig.compoundKeyDestCols && dupConfig.compoundKeySourceCols.length === dupConfig.compoundKeyDestCols.length) {
     for (let i = 0; i < dupConfig.compoundKeySourceCols.length; i++) {
-      const sourceCol = dupConfig.compoundKeySourceCols[i];
-      // Access source data array 0-indexed (Col - 1)
-      const val = (sourceCol <= sourceReadWidth) ? sourceRowData[sourceCol - 1] : undefined;
-      keyToCheck += sep + formatValueForKey(val);
+      keyPairs.push({
+        source: dupConfig.compoundKeySourceCols[i],
+        dest: dupConfig.compoundKeyDestCols[i]
+      });
     }
+    // Sort by source column index to ensure consistent order
+    keyPairs.sort((a, b) => a.source - b.source);
+  }
+
+  // 1. Build the key we are checking against (from the source data)
+  let keyToCheck = projectName.trim().toLowerCase();
+  for (const pair of keyPairs) {
+    const val = (pair.source <= sourceReadWidth) ? sourceRowData[pair.source - 1] : undefined;
+    keyToCheck += sep + formatValueForKey(val);
   }
 
   // 2. Determine the columns needed from the destination sheet for comparison
-  let cols = [destProjectNameCol];
-  if (dupConfig.compoundKeyDestCols && dupConfig.compoundKeyDestCols.length) {
-    cols = uniqueArray(cols.concat(dupConfig.compoundKeyDestCols));
+  let colsToRead = [destProjectNameCol];
+  if (keyPairs.length > 0) {
+    colsToRead = uniqueArray(colsToRead.concat(keyPairs.map(p => p.dest)));
   }
-  const minCol = Math.min(...cols);
-  const maxCol = Math.max(...cols);
+  const minCol = Math.min(...colsToRead);
+  const maxCol = Math.max(...colsToRead);
   const readWidth = maxCol - minCol + 1;
 
   if (maxCol > destinationSheet.getLastColumn()) {
@@ -224,9 +233,8 @@ function isDuplicateInDestination(destinationSheet, projectName, sourceRowData, 
   const range = destinationSheet.getRange(2, minCol, lastDestRow - 1, readWidth);
   const vals = range.getValues();
 
-  // Calculate relative indices for accessing the read data array (relative to minCol)
+  // Calculate relative index for the project name
   const projIdx = destProjectNameCol - minCol;
-  const cmpIdxs = (dupConfig.compoundKeyDestCols || []).map(col => col - minCol);
 
   // 4. Scan destination data for the key
   for (const row of vals) {
@@ -235,9 +243,10 @@ function isDuplicateInDestination(destinationSheet, projectName, sourceRowData, 
     let existingKey = row[projIdx] ? String(row[projIdx]).trim().toLowerCase() : "";
     if (!existingKey) continue;
 
-    // Build the key from the destination row
-    for (const idx of cmpIdxs) {
-      const v = (idx < row.length) ? row[idx] : "";
+    // Build the key from the destination row using the same sorted order
+    for (const pair of keyPairs) {
+      const destColIndex = pair.dest - minCol; // Relative index in the `row` array
+      const v = (destColIndex < row.length) ? row[destColIndex] : "";
       existingKey += sep + formatValueForKey(v);
     }
 
