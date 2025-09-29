@@ -102,6 +102,78 @@ function runTransferWidthBugTest() {
 }
 
 /**
+ * Test case to demonstrate the bug in duplicate check normalization.
+ * The bug is that the source project name is not normalized in the same way as the
+ * destination project names, causing the duplicate check to fail.
+ *
+ * TO RUN THIS TEST:
+ * 1. Open the Google Apps Script editor.
+ * 2. Select this function (`runDuplicateNormalizationBugTest`) from the function dropdown.
+ * 3. Click "Run".
+ * 4. Inspect the "Test_Destination" sheet and the logs.
+ *
+ * EXPECTED RESULT (BEFORE FIX):
+ * The transfer will SUCCEED, incorrectly adding a duplicate row. The log will show "success".
+ * The "Test_Destination" sheet will have two entries for "Normalization Test".
+ *
+ * EXPECTED RESULT (AFTER FIX):
+ * The transfer will be SKIPPED. The log will correctly show "skipped-duplicate".
+ * The "Test_Destination" sheet will have only one entry.
+ */
+function runDuplicateNormalizationBugTest() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const { sourceSheet, destSheet } = setupTestSheets(ss);
+
+  // Modify headers for this test
+  sourceSheet.getRange("A1:B1").setValues([["Project", "Some_Value"]]);
+  destSheet.getRange("A1:B1").setValues([["Project_Name", "Some_Value"]]);
+
+  // 1. Add existing data to the destination sheet. Name is properly cased.
+  destSheet.getRange("A2:B2").setValues([["Normalization Test", "Value A"]]);
+
+  // 2. Add source data with inconsistent casing and whitespace.
+  // This should be detected as a duplicate of the row in the destination.
+  sourceSheet.getRange("A2:B2").setValues([["  normalization test  ", "Value B"]]);
+
+  // 3. Create a mock onEdit event object.
+  const e = {
+    range: sourceSheet.getRange("A2"),
+    source: ss
+  };
+
+  // 4. Define the transfer configuration.
+  // We use a compound key to ensure the fallback logic is triggered.
+  const config = {
+    transferName: "Normalization Bug Test",
+    destinationSheetName: "Test_Destination",
+    sourceColumnsNeeded: [1, 2],
+    destinationColumnMapping: {
+      1: 1,
+      2: 2
+    },
+    duplicateCheckConfig: {
+      checkEnabled: true,
+      // No SFID columns are provided, forcing the fallback to project name + compound key.
+      projectNameSourceCol: 1,
+      projectNameDestCol: 1,
+      // Use a compound key to make the test more robust and ensure we are in the right code path
+      compoundKeySourceCols: [2],
+      compoundKeyDestCols: [2]
+    }
+  };
+
+  // 5. Execute the transfer.
+  try {
+    Logger.log("Starting Normalization Bug Test. Expecting to find a duplicate for 'normalization test'.");
+    executeTransfer(e, config);
+    SpreadsheetApp.flush();
+    Logger.log("Test finished. Check the 'Test_Destination' sheet and logs for success (bug) or failure (fixed).");
+  } catch (error) {
+    Logger.log("Test failed with an error: " + error.toString());
+  }
+}
+
+/**
  * Test case to demonstrate the bug in compound key duplicate checking in `executeTransfer`.
  * This test sets up a scenario where a compound key (e.g., Project + Deadline) is used
  * for duplicate checking. The bug causes the source value for the compound key to be

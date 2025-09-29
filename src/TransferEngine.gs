@@ -223,7 +223,7 @@ function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRow
   }
 
   // 1. Build the fallback key to check against from the source data
-  let keyToCheck = projectName.trim().toLowerCase();
+  let keyToCheck = formatValueForKey(projectName);
   for (const pair of keyPairs) {
     const val = (pair.source <= sourceReadWidth) ? sourceRowData[pair.source - 1] : undefined;
     keyToCheck += sep + formatValueForKey(val);
