@@ -250,7 +250,7 @@ function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRow
   // 4. Scan destination data for the key
   for (const row of vals) {
     if (projIdx >= row.length) continue;
-    let existingKey = row[projIdx] ? String(row[projIdx]).trim().toLowerCase() : "";
+    let existingKey = formatValueForKey(row[projIdx]); // Use consistent formatting
     if (!existingKey) continue;
 
     // Build the key from the destination row using the same sorted order
