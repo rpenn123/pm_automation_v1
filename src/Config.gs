@@ -147,6 +147,7 @@ const CONFIG = {
     ROW_SPACING: 15,
     PAST_MONTHS_COUNT: 3,
     UPCOMING_MONTHS_COUNT: 6,
+    STACKED: false,
     SERIES_PAST: ['Month', 'Overdue', 'Total'],
     SERIES_UPCOMING_NO_OVERDUE: ['Month', 'Upcoming', 'Total']
   }
