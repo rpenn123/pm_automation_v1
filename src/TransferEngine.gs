@@ -7,25 +7,37 @@
 
 /**
  * Executes a generic, configuration-driven data transfer from a source row to a destination sheet.
- * This function is the core of the transfer mechanism, designed to be called by trigger handlers in `Automations.gs`.
- * It handles script locking, data reading, duplicate checking, column mapping, and optional post-transfer actions like sorting.
+ * This function is the core of the transfer mechanism, designed to be called by trigger handlers
+ * in `Automations.gs`. It is a robust, single function that handles the entire transfer lifecycle:
+ * 1. Acquires a script lock to prevent race conditions.
+ * 2. Validates that the destination sheet exists.
+ * 3. Reads the required data from the source row in a single batch operation.
+ * 4. Checks for a valid identifier (SFID or Project Name), skipping rows without one.
+ * 5. Performs an SFID-first duplicate check to prevent creating duplicate entries.
+ * 6. Builds the new row for the destination sheet based on a flexible column mapping.
+ * 7. Appends the new row and updates "Last Edit" tracking if configured.
+ * 8. Executes post-transfer actions, such as sorting the destination sheet.
+ * All operations are wrapped in comprehensive error handling and audit logging.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object passed from the trigger.
- * @param {object} config The configuration object that defines the transfer.
- * @param {string} config.transferName A descriptive name for the transfer, used for logging.
+ * @param {object} config The configuration object that defines all aspects of the transfer.
+ * @param {string} config.transferName A descriptive name for the transfer, used for logging (e.g., "Upcoming Transfer").
  * @param {string} config.destinationSheetName The name of the sheet to which data will be transferred.
- * @param {number[]} config.sourceColumnsNeeded An array of 1-based column indices required from the source row.
- * @param {Object<number, number>} config.destinationColumnMapping An object mapping source column indices to destination column indices.
- * @param {object} [config.duplicateCheckConfig] Optional configuration for preventing duplicate entries.
- * @param {boolean} [config.duplicateCheckConfig.checkEnabled=true] Whether to perform a duplicate check.
- * @param {number} config.duplicateCheckConfig.projectNameSourceCol The 1-based column index of the project name in the source sheet.
+ * @param {number[]} config.sourceColumnsNeeded An array of 1-based column indices required from the source row. This helps optimize the read operation.
+ * @param {Object<number, number>} config.destinationColumnMapping An object mapping source column indices (keys) to destination column indices (values).
+ * @param {object} [config.duplicateCheckConfig] Configuration for preventing duplicate entries. If omitted, no duplicate check is performed.
+ * @param {boolean} [config.duplicateCheckConfig.checkEnabled=true] If false, the duplicate check is skipped.
+ * @param {number} [config.duplicateCheckConfig.sfidSourceCol] The 1-based column index of the Salesforce ID in the source sheet.
+ * @param {number} [config.duplicateCheckConfig.sfidDestCol] The 1-based column index of the Salesforce ID in the destination sheet.
+ * @param {number} config.duplicateCheckConfig.projectNameSourceCol The 1-based column index of the project name in the source sheet, used as a fallback identifier.
  * @param {number} config.duplicateCheckConfig.projectNameDestCol The 1-based column index of the project name in the destination sheet.
- * @param {number[]} [config.duplicateCheckConfig.compoundKeySourceCols] Optional array of additional source column indices to create a compound key for duplicate checking.
- * @param {number[]} [config.duplicateCheckConfig.compoundKeyDestCols] Optional array of additional destination column indices for the compound key.
- * @param {object} [config.postTransferActions] Optional configuration for actions to perform after a successful transfer.
- * @param {boolean} [config.postTransferActions.sort=false] Whether to sort the destination sheet after the transfer.
+ * @param {number[]} [config.duplicateCheckConfig.compoundKeySourceCols] For fallback checks, an array of additional source column indices to create a compound key (e.g., a deadline).
+ * @param {number[]} [config.duplicateCheckConfig.compoundKeyDestCols] The corresponding destination column indices for the compound key.
+ * @param {object} [config.postTransferActions] Actions to perform after a successful transfer.
+ * @param {boolean} [config.postTransferActions.sort=false] If true, sorts the destination sheet after appending the new row.
  * @param {number} config.postTransferActions.sortColumn The 1-based column index to sort by.
- * @param {boolean} config.postTransferActions.sortAscending Whether to sort in ascending order.
+ * @param {boolean} config.postTransferActions.sortAscending If true, sorts in ascending order; otherwise, descending.
+ * @returns {void}
  */
 function executeTransfer(e, config) {
   const lock = LockService.getScriptLock();
@@ -176,22 +188,28 @@ function executeTransfer(e, config) {
 }
 
 /**
- * Checks for a duplicate using an SFID-first strategy.
- * If an SFID is provided, it is used as the sole unique identifier for the check.
- * If no SFID is provided, it falls back to a compound key check (e.g., Project Name + Deadline).
+ * Performs a robust duplicate check in the destination sheet using an SFID-first strategy.
+ * This is a helper function for `executeTransfer` and is critical for data integrity.
+ * The check follows two main strategies:
+ * 1.  **SFID Check (Primary):** If a non-empty `sfid` is provided, the function performs a fast,
+ *     exact-match search on the destination SFID column. A match is considered a definitive duplicate.
+ * 2.  **Compound Key Check (Fallback):** If no SFID is available, the function constructs a unique
+ *     key from the Project Name plus any additional columns specified in `compoundKeySourceCols`.
+ *     It then scans the destination sheet to see if any existing row produces an identical key.
+ *     This maintains backward compatibility for legacy data that may not have an SFID.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} destinationSheet The sheet to scan.
- * @param {string|null} sfid The Salesforce ID from the source row.
- * @param {string} projectName The project name from the source row (for fallback).
- * @param {any[]} sourceRowData The array of values from the source row.
- * @param {number} sourceReadWidth The number of columns read from the source.
- * @param {object} dupConfig The configuration for the duplicate check.
- * @param {number} [dupConfig.sfidDestCol] The 1-based column for SFIDs in the destination sheet.
- * @param {number} dupConfig.projectNameDestCol The 1-based column for project names in the destination.
- * @param {number[]} [dupConfig.compoundKeySourceCols] Optional source columns for a compound key.
- * @param {number[]} [dupConfig.compoundKeyDestCols] Optional destination columns for a compound key.
- * @param {string} [dupConfig.keySeparator="|"] The separator for compound keys.
- * @returns {boolean} True if a duplicate is found, otherwise false.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} destinationSheet The sheet to scan for duplicates.
+ * @param {string|null} sfid The Salesforce ID from the source row. This is the preferred unique identifier.
+ * @param {string} projectName The project name from the source row, used for the fallback check.
+ * @param {any[]} sourceRowData The full array of values from the source row, used to build the compound key.
+ * @param {number} sourceReadWidth The number of columns that were read from the source row.
+ * @param {object} dupConfig The configuration object for the duplicate check, passed from `executeTransfer`.
+ * @param {number} [dupConfig.sfidDestCol] The 1-based column for SFIDs in the destination sheet. Required for SFID check.
+ * @param {number} dupConfig.projectNameDestCol The 1-based column for project names in the destination sheet.
+ * @param {number[]} [dupConfig.compoundKeySourceCols] Optional source columns for the compound key.
+ * @param {number[]} [dupConfig.compoundKeyDestCols] Optional corresponding destination columns for the compound key.
+ * @param {string} [dupConfig.keySeparator="|"] The separator used when concatenating values for the compound key.
+ * @returns {boolean} Returns `true` if a duplicate is found, otherwise `false`.
  */
 function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRowData, sourceReadWidth, dupConfig) {
   // Strategy 1: SFID is the primary, definitive check.

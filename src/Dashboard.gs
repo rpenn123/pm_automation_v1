@@ -1,12 +1,31 @@
 /**
  * @OnlyCurrentDoc
  * Dashboard.gs
- * Logic for generating the dashboard report, charts, and overdue details.
- * Utilizes efficient single-pass data processing.
+ * This file contains all logic for generating the main project dashboard, including data
+ * processing, report generation, chart creation, and the "Overdue Details" drill-down sheet.
+ * It is designed to be highly configurable and efficient.
  */
 
 /**
  * Main orchestrator function to generate or update the entire Dashboard.
+ * This function is the primary entry point for creating the dashboard, typically called from a custom menu.
+ *
+ * **Execution Flow:**
+ * 1.  **Initialization:** Gets UI, Spreadsheet, and sheet objects.
+ * 2.  **Data Reading:** Calls `readForecastingData` to get the raw data from the 'Forecasting' sheet.
+ * 3.  **Data Processing:** Calls `processForecastingData` for a highly efficient single pass over the
+ *     raw data to produce all necessary aggregates (monthly summaries, grand totals, overdue items).
+ * 4.  **Overdue Details:** Populates the 'Overdue Details' sheet with the list of overdue projects.
+ * 5.  **Dashboard Rendering:**
+ *     - Clears and prepares the main 'Dashboard' sheet.
+ *     - Writes headers and informational notes.
+ *     - Populates the monthly summary data, including hyperlink formulas to the overdue sheet.
+ *     - Writes grand totals and a count of items with missing deadlines.
+ * 6.  **Formatting & Charting:** Applies all visual formatting and calls `createOrUpdateDashboardCharts`
+ *     to generate the data visualizations.
+ *
+ * All steps are wrapped in a try-catch block for robust error handling and user notification.
+ * @returns {void}
  */
 function updateDashboard() {
   const ui = SpreadsheetApp.getUi();
@@ -105,6 +124,13 @@ function updateDashboard() {
 
 /**
  * Reads the necessary data from the 'Forecasting' sheet efficiently.
+ * It determines the maximum column number required by any dashboard logic from `CONFIG`
+ * and reads only up to that column in a single `getValues()` call, improving performance
+ * on sheets with many unnecessary columns.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} forecastSheet The sheet object for the 'Forecasting' data source.
+ * @returns {{forecastingValues: any[][], forecastingHeaders: string[]}|null} An object containing the 2D array
+ *   of data values and a 1D array of header values, or null on failure.
  */
 function readForecastingData(forecastSheet) {
   try {
@@ -126,7 +152,17 @@ function readForecastingData(forecastSheet) {
 }
 
 /**
- * Processes the raw forecasting data in a single, efficient pass.
+ * Processes the raw forecasting data in a single, efficient pass to generate all dashboard metrics.
+ * This is a key performance optimization. Instead of iterating over the data multiple times for
+ * different calculations, it iterates once and calculates everything simultaneously.
+ *
+ * @param {any[][]} forecastingValues A 2D array of the raw data from the 'Forecasting' sheet.
+ * @returns {{
+ *   monthlySummaries: Map<string, number[]>,
+ *   grandTotals: number[],
+ *   allOverdueItems: any[][],
+ *   missingDeadlinesCount: number
+ * }} An object containing all the aggregated data required by the dashboard.
  */
 function processForecastingData(forecastingValues) {
   const monthlySummaries = new Map();
@@ -193,12 +229,15 @@ function processForecastingData(forecastingValues) {
 // =================================================================
 
 /**
- * REFACTORED: Displays a placeholder message on the dashboard where a chart would go.
- * This provides clear user feedback when a chart cannot be generated due to lack of data.
+ * Displays a placeholder message on the dashboard in the area where a chart would normally appear.
+ * This provides clear user feedback when a chart cannot be generated due to a lack of data,
+ * improving the user experience by explaining why a chart is missing.
+ *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
- * @param {number} anchorRow The starting row for the placeholder.
- * @param {number} anchorCol The starting column for the placeholder.
- * @param {string} message The message to display.
+ * @param {number} anchorRow The 1-based starting row for the placeholder message.
+ * @param {number} anchorCol The 1-based starting column for the placeholder message.
+ * @param {string} message The text message to display in the placeholder.
+ * @returns {void}
  */
 function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
   try {
@@ -215,26 +254,31 @@ function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
 }
 
 /**
- * Populates the 'Overdue Details' sheet.
+ * Populates the 'Overdue Details' sheet with the full data for all overdue projects.
+ * This function clears the sheet, resizes it to fit the data, writes the original headers,
+ * and then writes the overdue project rows. It includes guards against errors that could
+ * occur if the source 'Forecasting' sheet is empty or malformed.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} overdueDetailsSheet The sheet object for 'Overdue Details'.
+ * @param {any[][]} allOverdueItems A 2D array of row data for projects determined to be overdue.
+ * @param {string[]} forecastingHeaders An array of header strings from the source sheet.
+ * @returns {void}
  */
 function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders) {
   try {
-    // FIX: Guard against an empty/invalid source sheet. If there are no headers,
-    // we can't determine columns, leading to a getRange(..., 0) error.
+    // Guard against an empty/invalid source sheet.
     if (!forecastingHeaders || forecastingHeaders.length === 0) {
       overdueDetailsSheet.clear();
-      // Provide feedback on the sheet itself.
       overdueDetailsSheet.getRange(1, 1).setValue("Source 'Forecasting' sheet is empty or has no header row.");
       Logger.log("Skipped populating Overdue Details: 'Forecasting' sheet appears to be empty.");
-      return; // Exit the function gracefully.
+      return;
     }
 
     const numRows = allOverdueItems.length;
-    // FIX: Use the actual data's column count to prevent mismatch errors.
     const numCols = allOverdueItems.length > 0 ? allOverdueItems[0].length : forecastingHeaders.length;
 
     overdueDetailsSheet.clear();
-    // Smart resizing
+    // Smart resizing to keep the sheet clean.
     if (overdueDetailsSheet.getMaxRows() > 1) {
       overdueDetailsSheet.deleteRows(2, overdueDetailsSheet.getMaxRows() - 1);
     }
@@ -242,7 +286,6 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
         overdueDetailsSheet.deleteColumns(numCols + 1, overdueDetailsSheet.getMaxColumns() - numCols);
     }
 
-    // Write headers, ensuring we don't write more headers than we have data columns
     const headersToWrite = forecastingHeaders.slice(0, numCols);
     overdueDetailsSheet.getRange(1, 1, 1, headersToWrite.length).setValues([headersToWrite]).setFontWeight("bold");
 
@@ -259,7 +302,12 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
 }
 
 /**
- * REFACTORED: Sets the static main headers for the dashboard summary table, with Year/Month split.
+ * Sets the static main headers for the dashboard's summary table. This function writes the
+ * header titles for both the monthly data and the grand total columns and applies standard
+ * header formatting (background color, font color, etc.).
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @returns {void}
  */
 function setDashboardHeaders(sheet) {
   const DL = CONFIG.DASHBOARD_LAYOUT;
@@ -286,7 +334,11 @@ function setDashboardHeaders(sheet) {
 }
 
 /**
- * Sets explanatory notes on the dashboard header cells.
+ * Sets explanatory notes on the dashboard header cells. These notes appear when a user
+ * hovers over a header, providing helpful context about what each metric represents.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @returns {void}
  */
 function setDashboardHeaderNotes(sheet) {
     const DL = CONFIG.DASHBOARD_LAYOUT;
@@ -298,12 +350,17 @@ function setDashboardHeaderNotes(sheet) {
 }
 
 /**
- * REFACTORED: Applies formatting, accounting for the Year/Month split.
+ * Applies all visual formatting to the dashboard data rows. This includes row banding
+ * (alternating colors), number formatting for dates and counts, and cell borders to create
+ * a clean, readable report.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @param {number} numDataRows The number of data rows to which formatting should be applied.
+ * @returns {void}
  */
 function applyDashboardFormatting(sheet, numDataRows) {
   const DL = CONFIG.DASHBOARD_LAYOUT;
   const DF = CONFIG.DASHBOARD_FORMATTING;
-  // Range now covers from Year to Approved
   const dataRange = sheet.getRange(2, DL.YEAR_COL, numDataRows, 6);
 
   dataRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY)
@@ -313,20 +370,21 @@ function applyDashboardFormatting(sheet, numDataRows) {
 
   sheet.getRange(2, 1, numDataRows, DL.GT_APPROVED_COL).setHorizontalAlignment("center");
 
-  // Format new Year and Month columns
   sheet.getRange(2, DL.YEAR_COL, numDataRows, 1).setNumberFormat("0000");
   sheet.getRange(2, DL.MONTH_COL, numDataRows, 1).setNumberFormat(DF.MONTH_FORMAT);
 
-  // Format count columns
   sheet.getRange(2, DL.TOTAL_COL, numDataRows, 4).setNumberFormat(DF.COUNT_FORMAT);
   sheet.getRange(2, DL.GT_UPCOMING_COL, 1, 4).setNumberFormat(DF.COUNT_FORMAT);
 
-  // Add borders for clarity
   sheet.getRange(1, 1, numDataRows + 1, DL.GT_APPROVED_COL).setBorder(true, true, true, true, true, true, DF.BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID_THIN);
 }
 
 /**
- * Hides temporary data columns.
+ * Hides the temporary data columns used for chart generation. This keeps the user-facing
+ * sheet clean, as these columns are an implementation detail and not meant for direct viewing.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @returns {void}
  */
 function hideDataColumns(sheet) {
     const DL = CONFIG.DASHBOARD_LAYOUT;
@@ -338,12 +396,21 @@ function hideDataColumns(sheet) {
 }
 
 /**
- * REFACTORED: Creates or updates dashboard charts with improved logging and on-sheet feedback for missing data.
+ * Creates or updates the dashboard charts. This function first removes any existing charts
+ * to ensure a clean slate. It then creates a temporary, hidden sheet to stage the data for
+ * each chart, which is a robust method for building charts programmatically. It generates
+ * two charts: one for past months and one for upcoming months, and includes on-sheet
+ * placeholder feedback if no data is available for a chart.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet where charts will be inserted.
+ * @param {Date[]} months An array of Date objects representing all months in the dashboard's range.
+ * @param {any[][]} dashboardData A 2D array of the processed monthly summary data.
+ * @returns {void}
  */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
     sheet.getCharts().forEach(chart => sheet.removeChart(chart));
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const tempSheetName = "TempChartData_Dashboard_v4"; // Incremented version
+    const tempSheetName = "TempChartData_Dashboard_v4"; // Versioned to avoid conflicts
     let tempSheet = ss.getSheetByName(tempSheetName);
     if (tempSheet) ss.deleteSheet(tempSheet);
     tempSheet = ss.insertSheet(tempSheetName).hideSheet();
@@ -392,40 +459,32 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
             total: dashboardData[i][0]
         }));
 
-        // Filter for Past Data
         const pastData = combinedData.filter(d => d.month >= pastStartDate && d.month < today)
                                      .map(d => [d.monthLabel, d.overdue, d.total]);
 
-        // Filter for Upcoming Data
         const upcomingData = combinedData.filter(d => d.month >= today && d.month < upcomingEndDate)
                                          .map(d => [d.monthLabel, d.upcoming, d.total]);
 
-        // --- Chart Generation with Feedback ---
         if (pastData.length > 0) {
             createChart(`Past ${pastData.length} Months: Overdue vs. Total`, pastData, ['Month', 'Overdue', 'Total'], [DF.overdue, DF.total], DL.CHART_START_ROW);
         } else {
-            // NEW: Provide on-sheet feedback and improved logging
-            const startStr = Utilities.formatDate(pastStartDate, timeZone, "MMM yyyy");
-            const endStr = Utilities.formatDate(today, timeZone, "MMM yyyy");
             const message = `No project data found for the past ${DC.PAST_MONTHS_COUNT} months.`;
             displayChartPlaceholder(sheet, DL.CHART_START_ROW, DL.CHART_ANCHOR_COL, message);
-            Logger.log(`Skipping 'Past Months' chart: No projects with deadlines between ${startStr} and ${endStr} were found.`);
+            Logger.log(`Skipping 'Past Months' chart: No data in the specified date range.`);
         }
 
         if (upcomingData.length > 0) {
             createChart(`Next ${upcomingData.length} Months: Upcoming vs. Total`, upcomingData, ['Month', 'Upcoming', 'Total'], [DF.upcoming, DF.total], DL.CHART_START_ROW + DC.ROW_SPACING);
         } else {
-            // NEW: Provide on-sheet feedback and improved logging
-            const startStr = Utilities.formatDate(today, timeZone, "MMM yyyy");
-            const endStr = Utilities.formatDate(upcomingEndDate, timeZone, "MMM yyyy");
             const message = `No project data found for the next ${DC.UPCOMING_MONTHS_COUNT} months.`;
             displayChartPlaceholder(sheet, DL.CHART_START_ROW + DC.ROW_SPACING, DL.CHART_ANCHOR_COL, message);
-            Logger.log(`Skipping 'Upcoming Months' chart: No projects with deadlines between ${startStr} and ${endStr} were found.`);
+            Logger.log(`Skipping 'Upcoming Months' chart: No data in the specified date range.`);
         }
 
     } catch (e) {
         Logger.log(`A critical error occurred in createOrUpdateDashboardCharts: ${e.message}\n${e.stack}`);
     } finally {
+        // Cleanup the temporary sheet
         if (ss.getSheetByName(tempSheetName)) {
             ss.deleteSheet(tempSheet);
         }
@@ -433,7 +492,12 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
 }
 
 /**
- * Generates a list of months between a start and end date.
+ * Generates a continuous list of Date objects, one for the first day of each month
+ * between a specified start and end date.
+ *
+ * @param {Date} startDate The first month to include in the list.
+ * @param {Date} endDate The last month to include in the list.
+ * @returns {Date[]} An array of Date objects.
  */
 function generateMonthList(startDate, endDate) {
     const months = [];

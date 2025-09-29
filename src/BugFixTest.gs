@@ -1,11 +1,29 @@
 /**
  * @OnlyCurrentDoc
  * BugFixTest.gs
- * This file contains the test case for the bug fix in `TransferEngine.gs`.
+ * This file contains the test case for a bug fix in `TransferEngine.gs`.
  * It specifically tests the `isDuplicateInDestination` function to ensure it correctly
  * identifies duplicates when a project name in the destination sheet is a Date object.
  */
 
+/**
+ * A specific unit test to verify a bug fix in the `isDuplicateInDestination` function.
+ *
+ * **Bug Context:** The `isDuplicateInDestination` function could fail to detect a duplicate
+ * if the destination sheet contained a Date object in its project name column, while the
+ * source data being checked had a string representation of that same date. This was because
+ * the values were not being consistently normalized before comparison.
+ *
+ * **Test Scenario:**
+ * 1.  **Mocks** a destination sheet where a "Project Name" is a `Date` object.
+ * 2.  **Defines** source data where the `projectName` is a string that matches the date in the mock sheet.
+ * 3.  **Executes** `isDuplicateInDestination` with this data.
+ * 4.  **Asserts** that the function correctly returns `true`, confirming that the normalization
+ *     logic inside the function (via `formatValueForKey`) handles this type mismatch correctly.
+ *
+ * This function is intended to be run manually from the Apps Script editor to validate the fix.
+ * @returns {void} Throws an error if the assertion fails.
+ */
 function testIsDuplicateInDestination_DateInProjectName() {
   // 1. Setup the test environment
   const testName = "testIsDuplicateInDestination_DateInProjectName";

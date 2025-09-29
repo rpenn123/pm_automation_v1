@@ -197,10 +197,11 @@ function logAudit(sourceSS, entry) {
 }
 
 /**
- * Sorts all monthly log sheets in the log spreadsheet by timestamp in descending order.
- * This function is intended to be called by an installable onOpen trigger. It iterates
- * through all sheets, identifies valid monthly log sheets (named "YYYY-MM"), and sorts
- * them based on the first column (Timestamp).
+ * Sorts all monthly log sheets within the designated log spreadsheet.
+ * This function is designed to be run by an `onOpen` trigger in the log spreadsheet.
+ * It iterates through all sheets, finds any that match the "YYYY-MM" log sheet format,
+ * and sorts them by timestamp (column 1) in descending order to keep the latest logs at the top.
+ * This action ensures logs are always easy to review upon opening the spreadsheet.
  */
 function sortLogSheetsOnOpen() {
   try {

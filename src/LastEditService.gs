@@ -2,13 +2,17 @@
  * @OnlyCurrentDoc
  * LastEditService.gs
  * Manages the creation, updating, and initialization of "Last Edit" tracking columns.
+ * This service provides a user-friendly way to see how recently a row has been modified.
  */
 
 /**
- * Iterates through all sheets specified in `CONFIG.LAST_EDIT.TRACKED_SHEETS`
- * and ensures that the required "Last Edit" columns exist on each one.
+ * Ensures that all sheets designated for edit tracking have the necessary "Last Edit" columns.
+ * It iterates through the sheet names listed in `CONFIG.LAST_EDIT.TRACKED_SHEETS`,
+ * finds each corresponding sheet object, and calls `ensureLastEditColumns` on it.
+ * This function is idempotent and safe to run multiple times.
  *
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to process.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet instance containing the sheets to process.
+ * @returns {void}
  */
 function ensureAllLastEditColumns(ss) {
   const trackedSheets = CONFIG.LAST_EDIT.TRACKED_SHEETS;
@@ -20,12 +24,14 @@ function ensureAllLastEditColumns(ss) {
 }
 
 /**
- * Ensures that a specific sheet has the necessary "Last Edit" columns: a hidden timestamp column
- * and a visible relative time formula column. If the columns do not exist by their header names,
- * they are created at the end of the sheet.
+ * Ensures a specific sheet has the "Last Edit" columns: a hidden timestamp and a visible relative time.
+ * If the columns do not exist by their header names (defined in `CONFIG.LAST_EDIT`),
+ * this function creates them at the end of the sheet. The raw timestamp column is hidden
+ * from users to reduce clutter.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to check and modify.
- * @returns {{tsCol: number, relCol: number}} An object containing the 1-based column indices for the timestamp (`tsCol`) and relative time (`relCol`) columns.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to check and potentially modify.
+ * @returns {{tsCol: number, relCol: number}} An object containing the 1-based column indices
+ *   for the timestamp (`tsCol`) and relative time (`relCol`) columns.
  */
 function ensureLastEditColumns(sheet) {
   const { AT_HEADER, REL_HEADER } = CONFIG.LAST_EDIT;
@@ -56,11 +62,17 @@ function ensureLastEditColumns(sheet) {
 }
 
 /**
- * Updates the "Last Edit" timestamp and the relative time formula for a specific row.
- * This function is typically called by an `onEdit` trigger. It skips header rows.
+ * Updates the "Last Edit" timestamp and relative time formula for a specific row.
+ * This function is the core of the live-updating "Last Edit" feature and is
+ * typically called from a main `onEdit` trigger. It performs the following steps:
+ * 1. Ensures the necessary "Last Edit" columns exist.
+ * 2. Writes the current timestamp to the hidden timestamp column.
+ * 3. Sets a formula in the visible "Last Edit" column that calculates the relative time.
+ * It gracefully handles and logs errors to prevent halting the entire `onEdit` process.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet where the edit occurred.
  * @param {number} row The 1-based row number that was edited.
+ * @returns {void}
  */
 function updateLastEditForRow(sheet, row) {
   if (row <= 1) return; // Skip headers
@@ -87,31 +99,40 @@ function updateLastEditForRow(sheet, row) {
 }
 
 /**
- * Generates an optimized Google Sheets formula to calculate a human-readable relative time
- * (e.g., "5 minutes", "2 hours", "3 days") from a timestamp cell. It uses the `LET` function
- * for improved performance and readability within the sheet.
+ * Generates an optimized and correct Google Sheets formula to calculate a human-readable relative time.
+ * This corrected formula (e.g., "5 min. ago", "2 hr. ago") uses `LET` for performance.
+ * It checks progressively larger time units and provides a user-friendly output.
  *
  * @private
  * @param {string} tsA1 The A1 notation of the cell containing the raw timestamp (e.g., "Z2").
- * @returns {string} The complete Google Sheets formula.
+ * @returns {string} The complete, corrected Google Sheets formula.
  */
 function _generateOptimizedRelativeTimeFormula(tsA1) {
-  return `=IF(${tsA1}="","", 
-      LET(duration, NOW()-${tsA1}, 
-          minutes, duration*1440, 
-          hours, duration*24, 
-          days, duration, 
-          weeks, duration/7,
-          IF(minutes<1, ROUND(minutes)&" minutes",
-          IF(hours<1, ROUND(hours)&" hours",
-          IF(days<7, ROUND(days)&" days", 
-          ROUND(weeks)&" weeks")))))`;
+  // This formula uses LET for performance by calculating the duration once.
+  // It then checks progressively larger units of time and returns the first appropriate match.
+  return `=IF(${tsA1}="", "",
+    LET(
+      diff, NOW() - ${tsA1},
+      minutes, diff * 1440,
+      hours, diff * 24,
+      days, diff,
+      weeks, diff / 7,
+      IF(minutes < 1, "just now",
+      IF(minutes < 60, ROUND(minutes) & " min. ago",
+      IF(hours < 24, ROUND(hours) & " hr. ago",
+      IF(days < 7, ROUND(days) & " day(s) ago",
+      ROUND(weeks) & " wk. ago"
+    ))))))`;
 }
 
 /**
- * Initializes or re-applies the "Last Edit" relative time formulas for all existing data rows
- * on the tracked sheets. This is a utility function that can be run manually, useful for
- * backfilling the formulas after the feature has been added to a sheet with existing data.
+ * Initializes or re-applies "Last Edit" formulas for all data rows in tracked sheets.
+ * This function is designed to be run manually from the script editor or a custom menu.
+ * Its primary use case is to backfill the relative time formulas for all existing data
+ * after the "Last Edit" feature has been deployed for the first time. It processes
+ * each tracked sheet in a batch operation for efficiency.
+ *
+ * @returns {void}
  */
 function initializeLastEditFormulas() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
