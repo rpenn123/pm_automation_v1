@@ -65,22 +65,21 @@ function executeTransfer(e, config) {
     // Read the necessary part of the row in a single batch
     const sourceRowData = sourceSheet.getRange(editedRow, 1, 1, readWidth).getValues()[0];
 
-    // Identify Project Name (Required for logging and duplicate checks)
-    const FC_PN_COL = CONFIG.FORECASTING_COLS.PROJECT_NAME;
-    const projectNameColIndex = (config.duplicateCheckConfig && config.duplicateCheckConfig.projectNameSourceCol) || FC_PN_COL;
+    // Identify SFID and Project Name for logging and duplicate checks
+    const { sfidSourceCol, projectNameSourceCol } = config.duplicateCheckConfig || {};
+    let sfid = sfidSourceCol && sfidSourceCol <= readWidth ? sourceRowData[sfidSourceCol - 1] : null;
+    projectName = projectNameSourceCol && projectNameSourceCol <= readWidth ? sourceRowData[projectNameSourceCol - 1] : "";
+    sfid = sfid ? String(sfid).trim() : null;
+    projectName = projectName ? String(projectName).trim() : "";
     
-    // Access array using 0-based index (ColIndex - 1)
-    if (projectNameColIndex <= readWidth && sourceRowData[projectNameColIndex - 1]) {
-        projectName = String(sourceRowData[projectNameColIndex - 1]).trim();
-    }
-
-    if (!projectName) {
-      Logger.log(`${config.transferName}: Skipping row ${editedRow}; missing Project Name.`);
+    // A record must have at least an SFID or a Project Name to be processed
+    if (!sfid && !projectName) {
+      Logger.log(`${config.transferName}: Skipping row ${editedRow}; missing both SFID and Project Name.`);
       logAudit(ss, {
         action: config.transferName,
         sourceSheet: sourceSheet.getName(),
         sourceRow: editedRow,
-        details: "Missing Project Name",
+        details: "Missing both SFID and Project Name",
         result: "skipped"
       });
       return;
@@ -88,12 +87,14 @@ function executeTransfer(e, config) {
 
     // Perform Duplicate Check
     if (config.duplicateCheckConfig && config.duplicateCheckConfig.checkEnabled !== false) {
-      if (isDuplicateInDestination(destinationSheet, projectName, sourceRowData, readWidth, config.duplicateCheckConfig)) {
-        Logger.log(`${config.transferName}: Duplicate detected for "${projectName}".`);
+      if (isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRowData, readWidth, config.duplicateCheckConfig)) {
+        const logIdentifier = sfid ? `SFID ${sfid}` : `project "${projectName}"`;
+        Logger.log(`${config.transferName}: Duplicate detected for ${logIdentifier}.`);
         logAudit(ss, {
           action: config.transferName,
           sourceSheet: sourceSheet.getName(),
           sourceRow: editedRow,
+          sfid: sfid,
           projectName: projectName,
           details: "Duplicate",
           result: "skipped-duplicate"
@@ -175,50 +176,60 @@ function executeTransfer(e, config) {
 }
 
 /**
- * Checks for a duplicate entry in the destination sheet based on a flexible keying strategy.
- * It can check for duplicates based on a simple project name or a compound key (e.g., Project Name + Deadline).
- * This function builds a unique key from the source row data and efficiently scans the destination sheet for a matching key.
+ * Checks for a duplicate using an SFID-first strategy.
+ * If an SFID is provided, it is used as the sole unique identifier for the check.
+ * If no SFID is provided, it falls back to a compound key check (e.g., Project Name + Deadline).
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} destinationSheet The sheet to scan for duplicates.
- * @param {string} projectName The project name from the source row.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} destinationSheet The sheet to scan.
+ * @param {string|null} sfid The Salesforce ID from the source row.
+ * @param {string} projectName The project name from the source row (for fallback).
  * @param {any[]} sourceRowData The array of values from the source row.
- * @param {number} sourceReadWidth The number of columns read from the source sheet to ensure no out-of-bounds access.
+ * @param {number} sourceReadWidth The number of columns read from the source.
  * @param {object} dupConfig The configuration for the duplicate check.
- * @param {number} dupConfig.projectNameDestCol The 1-based column index of the project name in the destination sheet.
- * @param {number[]} [dupConfig.compoundKeySourceCols] Optional array of 1-based source column indices for a compound key.
- * @param {number[]} [dupConfig.compoundKeyDestCols] Optional array of 1-based destination column indices for a compound key.
- * @param {string} [dupConfig.keySeparator="|"] The separator character used for building compound keys.
- * @returns {boolean} True if a duplicate key is found in the destination sheet, otherwise false.
+ * @param {number} [dupConfig.sfidDestCol] The 1-based column for SFIDs in the destination sheet.
+ * @param {number} dupConfig.projectNameDestCol The 1-based column for project names in the destination.
+ * @param {number[]} [dupConfig.compoundKeySourceCols] Optional source columns for a compound key.
+ * @param {number[]} [dupConfig.compoundKeyDestCols] Optional destination columns for a compound key.
+ * @param {string} [dupConfig.keySeparator="|"] The separator for compound keys.
+ * @returns {boolean} True if a duplicate is found, otherwise false.
  */
-function isDuplicateInDestination(destinationSheet, projectName, sourceRowData, sourceReadWidth, dupConfig) {
+function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRowData, sourceReadWidth, dupConfig) {
+  // Strategy 1: SFID is the primary, definitive check.
+  if (sfid && dupConfig.sfidDestCol) {
+    // Use the efficient, exact-match lookup utility. A match here is a definitive duplicate.
+    return findRowByValue(destinationSheet, sfid, dupConfig.sfidDestCol) !== -1;
+  }
+
+  // Strategy 2: Fallback to Project Name + Compound Key if no SFID is present.
+  // This maintains backward compatibility with legacy data.
+  if (!projectName) {
+    // Cannot perform fallback check without a project name.
+    return false;
+  }
+
   const destProjectNameCol = dupConfig.projectNameDestCol;
   const lastDestRow = destinationSheet.getLastRow();
   if (lastDestRow < 2) return false; // No data rows exist
 
   const sep = dupConfig.keySeparator || "|";
 
-  // Create pairs of source/destination columns for the compound key and sort them
-  // to ensure the key is built in a deterministic order.
+  // Create pairs for the compound key, ensuring consistent order
   const keyPairs = [];
   if (dupConfig.compoundKeySourceCols && dupConfig.compoundKeyDestCols && dupConfig.compoundKeySourceCols.length === dupConfig.compoundKeyDestCols.length) {
     for (let i = 0; i < dupConfig.compoundKeySourceCols.length; i++) {
-      keyPairs.push({
-        source: dupConfig.compoundKeySourceCols[i],
-        dest: dupConfig.compoundKeyDestCols[i]
-      });
+      keyPairs.push({ source: dupConfig.compoundKeySourceCols[i], dest: dupConfig.compoundKeyDestCols[i] });
     }
-    // Sort by source column index to ensure consistent order
     keyPairs.sort((a, b) => a.source - b.source);
   }
 
-  // 1. Build the key we are checking against (from the source data)
+  // 1. Build the fallback key to check against from the source data
   let keyToCheck = projectName.trim().toLowerCase();
   for (const pair of keyPairs) {
     const val = (pair.source <= sourceReadWidth) ? sourceRowData[pair.source - 1] : undefined;
     keyToCheck += sep + formatValueForKey(val);
   }
 
-  // 2. Determine the columns needed from the destination sheet for comparison
+  // 2. Determine columns needed from the destination for comparison
   let colsToRead = [destProjectNameCol];
   if (keyPairs.length > 0) {
     colsToRead = uniqueArray(colsToRead.concat(keyPairs.map(p => p.dest)));
@@ -231,28 +242,24 @@ function isDuplicateInDestination(destinationSheet, projectName, sourceRowData, 
     Logger.log("Duplicate check warning: destination sheet missing expected columns for compound key. Check may be incomplete.");
   }
 
-  // 3. Read destination data efficiently in a batch
+  // 3. Read destination data in a batch
   const range = destinationSheet.getRange(2, minCol, lastDestRow - 1, readWidth);
   const vals = range.getValues();
-
-  // Calculate relative index for the project name
-  const projIdx = destProjectNameCol - minCol;
+  const projIdx = destProjectNameCol - minCol; // Relative index for project name
 
   // 4. Scan destination data for the key
   for (const row of vals) {
-    if (projIdx >= row.length) continue; // Handle ragged rows
-    
+    if (projIdx >= row.length) continue;
     let existingKey = row[projIdx] ? String(row[projIdx]).trim().toLowerCase() : "";
     if (!existingKey) continue;
 
     // Build the key from the destination row using the same sorted order
     for (const pair of keyPairs) {
-      const destColIndex = pair.dest - minCol; // Relative index in the `row` array
+      const destColIndex = pair.dest - minCol;
       const v = (destColIndex < row.length) ? row[destColIndex] : "";
       existingKey += sep + formatValueForKey(v);
     }
 
-    // Compare keys
     if (existingKey === keyToCheck) return true;
   }
 

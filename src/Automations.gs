@@ -123,14 +123,17 @@ function onEdit(e) {
  */
 function handleSyncAndPotentialFramingTransfer(e) {
   const sheet = e.range.getSheet();
+  const editedRow = e.range.getRow();
   const FC = CONFIG.FORECASTING_COLS;
-  // Get project name using the 1-based index directly in getRange
-  const projectName = sheet.getRange(e.range.getRow(), FC.PROJECT_NAME).getValue();
+
+  // Read both SFID and Project Name from the source row
+  const sfid = sheet.getRange(editedRow, FC.SFID).getValue();
+  const projectName = sheet.getRange(editedRow, FC.PROJECT_NAME).getValue();
   const newValue = e.value;
 
-  // 1. Synchronization
-  if (projectName) {
-    syncProgressToUpcoming(projectName, newValue, e.source, e);
+  // 1. Synchronization (ensure at least one identifier exists)
+  if (sfid || projectName) {
+    syncProgressToUpcoming(sfid, projectName, newValue, e.source, e);
   }
   
   // 2. Conditional Transfer
@@ -149,104 +152,106 @@ function handleSyncAndPotentialFramingTransfer(e) {
  */
 function triggerSyncToForecasting(e) {
   const sheet = e.range.getSheet();
+  const editedRow = e.range.getRow();
   const UP = CONFIG.UPCOMING_COLS;
-  // Get project name using the 1-based index directly in getRange
-  const projectName = sheet.getRange(e.range.getRow(), UP.PROJECT_NAME).getValue();
+
+  // Read both SFID and Project Name from the source row
+  const sfid = sheet.getRange(editedRow, UP.SFID).getValue();
+  const projectName = sheet.getRange(editedRow, UP.PROJECT_NAME).getValue();
   
-  if (projectName) {
-    syncProgressToForecasting(projectName, e.value, e.source, e);
+  if (sfid || projectName) {
+    syncProgressToForecasting(sfid, projectName, e.value, e.source, e);
   }
 }
 
 /**
- * Synchronizes the 'Progress' status for a given project from the 'Forecasting' sheet to the 'Upcoming' sheet.
- * It uses a script lock to prevent race conditions and includes a crucial check to avoid infinite
- * recursive loops by only writing the new value if it's different from the existing value.
+ * Synchronizes 'Progress' from 'Forecasting' to 'Upcoming' using an SFID-first strategy.
+ * It uses a script lock and a value check to prevent infinite loops.
  *
- * @param {string} projectName The name of the project to sync.
+ * @param {string} sfid The Salesforce ID of the project to sync.
+ * @param {string} projectName The name of the project to sync (fallback).
  * @param {*} newValue The new value of the 'Progress' cell.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
  * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event object for logging context.
- * @returns {void}
  */
-function syncProgressToUpcoming(projectName, newValue, ss, eCtx) {
+function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
   const { UPCOMING } = CONFIG.SHEETS;
   const UP = CONFIG.UPCOMING_COLS;
   const actionName = "SyncFtoU";
+  const logIdentifier = sfid ? `SFID ${sfid}` : `"${projectName}"`;
 
   try {
-    // Use a short lock to prevent blocking during rapid edits
     lockAcquired = lock.tryLock(2000);
     if (!lockAcquired) {
-      Logger.log(`${actionName}: Lock not acquired for "${projectName}". Skipping.`);
-      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx ? eCtx.range.getSheet().getName() : "", sourceRow: eCtx ? eCtx.range.getRow() : "", projectName: projectName, result: "skipped" });
+      Logger.log(`${actionName}: Lock not acquired for ${logIdentifier}. Skipping.`);
+      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" });
       return;
     }
 
     const upcomingSheet = ss.getSheetByName(UPCOMING);
     if (!upcomingSheet) throw new Error(`Destination sheet "${UPCOMING}" not found`);
 
-    // Find the row in the destination sheet
-    const row = findRowByProjectNameRobust(upcomingSheet, projectName, UP.PROJECT_NAME);
+    // Use the new SFID-first lookup function
+    const row = findRowByBestIdentifier(upcomingSheet, sfid, UP.SFID, projectName, UP.PROJECT_NAME);
     
     if (row !== -1) {
       const targetCell = upcomingSheet.getRange(row, UP.PROGRESS);
       const currentValueStr = normalizeForComparison(targetCell.getValue());
       const newValueStr = normalizeForComparison(newValue);
 
-      // Crucial check to prevent infinite loops
       if (currentValueStr !== newValueStr) {
         targetCell.setValue(newValue);
-        // Update Last Edit on the destination sheet
         updateLastEditForRow(upcomingSheet, row);
         SpreadsheetApp.flush();
-        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, projectName: projectName, details: `Progress ${currentValueStr} -> ${newValueStr}`, result: "updated" });
+        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress ${currentValueStr} -> ${newValueStr}`, result: "updated" });
       } else {
-        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, projectName: projectName, details: "No change", result: "noop" });
+        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
       }
     } else {
-      logAudit(ss, { action: actionName, sourceSheet: UPCOMING, projectName: projectName, details: "Project not found", result: "miss" });
+      logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, details: "Project not found", result: "miss" });
     }
   } catch (error) {
-    Logger.log(`${actionName} error for "${projectName}": ${error}\n${error.stack}`);
-    notifyError(`${actionName} failed for project "${projectName}"`, error, ss);
-    logAudit(ss, { action: actionName, sourceSheet: UPCOMING, projectName: projectName, result: "error", errorMessage: String(error) });
+    Logger.log(`${actionName} error for ${logIdentifier}: ${error}\n${error.stack}`);
+    notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss);
+    logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) });
   } finally {
     if (lockAcquired) lock.releaseLock();
   }
 }
 
 /**
- * Synchronizes the 'Progress' status for a given project from the 'Upcoming' sheet back to the 'Forecasting' sheet.
- * This completes the two-way sync. It uses a script lock and a value check to prevent infinite loops.
+ * Synchronizes 'Progress' from 'Upcoming' back to 'Forecasting' using an SFID-first strategy.
+ * This completes the two-way sync, preventing infinite loops.
  *
- * @param {string} projectName The name of the project to sync.
+ * @param {string} sfid The Salesforce ID of the project to sync.
+ * @param {string} projectName The name of the project to sync (fallback).
  * @param {*} newValue The new value of the 'Progress' cell.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
  * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event object for logging context.
- * @returns {void}
  */
-function syncProgressToForecasting(projectName, newValue, ss, eCtx) {
+function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
   const { FORECASTING } = CONFIG.SHEETS;
   const FC = CONFIG.FORECASTING_COLS;
   const actionName = "SyncUtoF";
+  const logIdentifier = sfid ? `SFID ${sfid}` : `"${projectName}"`;
 
   try {
     lockAcquired = lock.tryLock(2000);
     if (!lockAcquired) {
-      Logger.log(`${actionName}: Lock not acquired for "${projectName}". Skipping.`);
-      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx ? eCtx.range.getSheet().getName() : "", sourceRow: eCtx ? eCtx.range.getRow() : "", projectName: projectName, result: "skipped" });
+      Logger.log(`${actionName}: Lock not acquired for ${logIdentifier}. Skipping.`);
+      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" });
       return;
     }
 
     const forecastingSheet = ss.getSheetByName(FORECASTING);
     if (!forecastingSheet) throw new Error(`Destination sheet "${FORECASTING}" not found`);
 
-    const row = findRowByProjectNameRobust(forecastingSheet, projectName, FC.PROJECT_NAME);
+    // Use the new SFID-first lookup function
+    const row = findRowByBestIdentifier(forecastingSheet, sfid, FC.SFID, projectName, FC.PROJECT_NAME);
 
     if (row !== -1) {
       const targetCell = forecastingSheet.getRange(row, FC.PROGRESS);
@@ -255,20 +260,19 @@ function syncProgressToForecasting(projectName, newValue, ss, eCtx) {
 
       if (currentValueStr !== newValueStr) {
         targetCell.setValue(newValue);
-        // Update Last Edit on the destination sheet
         updateLastEditForRow(forecastingSheet, row);
         SpreadsheetApp.flush();
-        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, projectName: projectName, details: `Progress ${currentValueStr} -> ${newValueStr}`, result: "updated" });
+        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress ${currentValueStr} -> ${newValueStr}`, result: "updated" });
       } else {
-        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, projectName: projectName, details: "No change", result: "noop" });
+        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
       }
     } else {
-      logAudit(ss, { action: actionName, sourceSheet: FORECASTING, projectName: projectName, details: "Project not found", result: "miss" });
+      logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, details: "Project not found", result: "miss" });
     }
   } catch (error) {
-    Logger.log(`${actionName} error for "${projectName}": ${error}\n${error.stack}`);
-    notifyError(`${actionName} failed for project "${projectName}"`, error, ss);
-    logAudit(ss, { action: actionName, sourceSheet: FORECASTING, projectName: projectName, result: "error", errorMessage: String(error) });
+    Logger.log(`${actionName} error for ${logIdentifier}: ${error}\n${error.stack}`);
+    notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss);
+    logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) });
   } finally {
     if (lockAcquired) lock.releaseLock();
   }
@@ -296,11 +300,12 @@ function triggerUpcomingTransfer(e) {
     destinationSheetName: CONFIG.SHEETS.UPCOMING,
     // List of required source column indices (1-based)
     sourceColumnsNeeded: [
-      FC.PROJECT_NAME, FC.EQUIPMENT, FC.PROGRESS,
+      FC.SFID, FC.PROJECT_NAME, FC.EQUIPMENT, FC.PROGRESS,
       FC.PERMITS, FC.DEADLINE, FC.LOCATION
     ],
     // Mapping: { [Source_COL_1]: Dest_COL_1 }
     destinationColumnMapping: createMapping([
+      [FC.SFID,         UP.SFID],
       [FC.PROJECT_NAME, UP.PROJECT_NAME],
       [FC.DEADLINE,     UP.DEADLINE],
       [FC.PROGRESS,     UP.PROGRESS],
@@ -311,6 +316,9 @@ function triggerUpcomingTransfer(e) {
     ]),
     duplicateCheckConfig: {
       checkEnabled: true,
+      // SFID is now the primary check, with Project Name as fallback
+      sfidSourceCol: FC.SFID,
+      sfidDestCol: UP.SFID,
       projectNameSourceCol: FC.PROJECT_NAME,
       projectNameDestCol: UP.PROJECT_NAME
     },
@@ -370,16 +378,19 @@ function triggerFramingTransfer(e) {
   const config = {
     transferName: "Framing Transfer (In Progress)",
     destinationSheetName: CONFIG.SHEETS.FRAMING,
-    sourceColumnsNeeded: [ FC.PROJECT_NAME, FC.EQUIPMENT, FC.ARCHITECT, FC.DEADLINE ],
+    sourceColumnsNeeded: [ FC.SFID, FC.PROJECT_NAME, FC.EQUIPMENT, FC.ARCHITECT, FC.DEADLINE ],
     destinationColumnMapping: createMapping([
+      [FC.SFID,         FR.SFID],
       [FC.PROJECT_NAME, FR.PROJECT_NAME],
       [FC.EQUIPMENT,    FR.EQUIPMENT],
       [FC.ARCHITECT,    FR.ARCHITECT],
       [FC.DEADLINE,     FR.DEADLINE]
     ]),
-    // Use a compound key (Project Name + Deadline) to allow the same project if the deadline changes
+    // Use SFID as primary duplicate check, falling back to compound key (Project Name + Deadline)
     duplicateCheckConfig: {
       checkEnabled: true,
+      sfidSourceCol: FC.SFID,
+      sfidDestCol: FR.SFID,
       projectNameSourceCol: FC.PROJECT_NAME,
       projectNameDestCol: FR.PROJECT_NAME,
       compoundKeySourceCols: [FC.DEADLINE],

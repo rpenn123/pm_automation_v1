@@ -31,37 +31,40 @@ const CONFIG = {
 
   // --- Forecasting Columns (1-indexed) ---
   FORECASTING_COLS: {
-    PROJECT_NAME: 1,  // A
-    DETAILS: 3,       // C (Used for Inventory transfer)
-    EQUIPMENT: 5,     // E
-    PROGRESS: 6,      // F (Synced with Upcoming E, Triggers Framing)
-    PERMITS: 7,       // G (Triggers Upcoming transfer)
-    ARCHITECT: 8,     // H (Used for Framing transfer)
-    DEADLINE: 9,      // I
-    DELIVERED: 11,    // K (Triggers Inventory transfer)
-    LOCATION: 15,     // O (Used for Upcoming transfer)
+    SFID: 1,          // A - Salesforce ID for unique record syncing
+    PROJECT_NAME: 2,  // B
+    DETAILS: 4,       // D (Used for Inventory transfer)
+    EQUIPMENT: 6,     // F
+    PROGRESS: 7,      // G (Synced with Upcoming F, Triggers Framing)
+    PERMITS: 8,       // H (Triggers Upcoming transfer)
+    ARCHITECT: 9,     // I (Used for Framing transfer)
+    DEADLINE: 10,     // J
+    DELIVERED: 12,    // L (Triggers Inventory transfer)
+    LOCATION: 16,     // P (Used for Upcoming transfer)
   },
 
   // --- Upcoming Columns (1-indexed) ---
   UPCOMING_COLS: {
-    PROJECT_NAME: 1,       // A
-    CONSTRUCTION_START: 2, // B
-    DEADLINE: 3,           // C
-    PROGRESS: 4,           // D
-    EQUIPMENT: 5,          // E
-    PERMITS: 6,            // F
-    CONSTRUCTION: 7,       // G
-    // Column H ("Tr") is intentionally unmapped as it's not part of any automation.
-    LOCATION: 9,           // I
-    NOTES: 10,             // J
+    SFID: 1,               // A - Salesforce ID for unique record syncing
+    PROJECT_NAME: 2,       // B
+    CONSTRUCTION_START: 3, // C
+    DEADLINE: 4,           // D
+    PROGRESS: 5,           // E
+    EQUIPMENT: 6,          // F
+    PERMITS: 7,            // G
+    CONSTRUCTION: 8,       // H
+    // Column I ("Tr") is intentionally unmapped as it's not part of any automation.
+    LOCATION: 10,          // J
+    NOTES: 11,             // K
   },
 
   // --- Framing Columns (1-indexed) ---
   FRAMING_COLS: {
-    PROJECT_NAME: 1, // A
-    DEADLINE: 4,     // D
-    ARCHITECT: 6,    // F
-    EQUIPMENT: 8,    // H
+    SFID: 1,        // A - Salesforce ID for unique record syncing
+    PROJECT_NAME: 2,// B
+    DEADLINE: 5,    // E
+    ARCHITECT: 7,   // G
+    EQUIPMENT: 9,   // I
   },
 
   // --- Inventory Columns (1-indexed) ---
