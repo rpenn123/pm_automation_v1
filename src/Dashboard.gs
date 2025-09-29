@@ -79,12 +79,13 @@ function updateDashboard() {
       dashboardSheet.getRange(dataStartRow, DL.OVERDUE_COL, numDataRows, 1).setFormulas(overdueFormulas);
       dashboardSheet.getRange(dataStartRow, DL.APPROVED_COL, numDataRows, 1).setValues(otherData.map(function(r){ return [r[2]]; }));
 
-      // Grand totals [upcoming, overdue, total, approved]
-      const gtUpcoming = grandTotals[0];
-      const gtOverdue  = grandTotals[1];
-      const gtTotal    = grandTotals[2];
+      // Grand totals, now aligned with monthlySummaries: [total, upcoming, overdue, approved]
+      const gtTotal    = grandTotals[0];
+      const gtUpcoming = grandTotals[1];
+      const gtOverdue  = grandTotals[2];
       const gtApproved = grandTotals[3];
 
+      // Note the order of assignment now matches the GT column order on the sheet
       dashboardSheet.getRange(dataStartRow, DL.GT_UPCOMING_COL).setValue(gtUpcoming);
       dashboardSheet.getRange(dataStartRow, DL.GT_OVERDUE_COL).setFormula('=HYPERLINK("#gid=' + overdueSheetGid + '", ' + gtOverdue + ')');
       dashboardSheet.getRange(dataStartRow, DL.GT_TOTAL_COL).setValue(gtTotal);
@@ -152,7 +153,8 @@ function readForecastingData(forecastSheet) {
 function processForecastingData(forecastingValues) {
   const monthlySummaries = new Map();
   const allOverdueItems = [];
-  var grandTotals = [0, 0, 0, 0]; // [upcoming, overdue, total, approved]
+  // Standardized to [total, upcoming, overdue, approved] to match monthlySummaries
+  var grandTotals = [0, 0, 0, 0];
   var missingDeadlinesCount = 0;
 
   var today = new Date();
@@ -184,7 +186,7 @@ function processForecastingData(forecastingValues) {
     var monthData = monthlySummaries.get(key);
 
     monthData[0]++;       // total in month
-    grandTotals[2]++;     // GT total
+    grandTotals[0]++;     // GT total
 
     var currentStatus = normalizeString(row[progressIdx]);
     var isInProgress  = currentStatus === inProgressLower;
@@ -193,10 +195,10 @@ function processForecastingData(forecastingValues) {
     if (isInProgress || isScheduled) {
       if (deadlineDate > today) {
         monthData[1]++;   // upcoming
-        grandTotals[0]++;
+        grandTotals[1]++; // GT upcoming
       } else if (isInProgress) {
         monthData[2]++;   // overdue
-        grandTotals[1]++;
+        grandTotals[2]++; // GT overdue
         allOverdueItems.push(row);
       }
     }
