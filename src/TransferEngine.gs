@@ -57,7 +57,8 @@ function executeTransfer(e, config) {
     }
 
     // Read source data efficiently
-    const maxSourceColNeeded = Math.max(...config.sourceColumnsNeeded);
+    const mappedSourceCols = Object.keys(config.destinationColumnMapping || {}).map(Number);
+    const maxSourceColNeeded = Math.max(...(config.sourceColumnsNeeded || []), ...mappedSourceCols);
     const actualLastSourceCol = sourceSheet.getLastColumn();
     const readWidth = Math.min(maxSourceColNeeded, actualLastSourceCol);
     // Read the necessary part of the row in a single batch
