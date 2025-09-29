@@ -1,14 +1,16 @@
 /**
  * @OnlyCurrentDoc
  * Setup.gs
- * Handles UI menu creation (onOpen) and one-time installation routines.
+ * Handles UI menu creation (`onOpen`) and one-time installation routines for project features.
+ * This script provides the primary user interface for manual script operations.
  */
 
 /**
- * A simple trigger that runs when the spreadsheet is opened. It creates a custom menu
- * in the UI for users to interact with the script's main functions.
+ * An `onOpen` simple trigger that runs automatically when the spreadsheet is opened.
+ * It creates a custom "🚀 Project Actions" menu in the Google Sheets UI, providing users
+ * with easy access to the script's main functions without needing to open the script editor.
  *
- * @param {object} e The event object passed by the `onOpen` simple trigger.
+ * @param {object} e The event object passed by the `onOpen` simple trigger (not used directly, but required by the signature).
  * @returns {void}
  */
 function onOpen(e) {
@@ -23,8 +25,10 @@ function onOpen(e) {
 
 /**
  * A wrapper function to call `updateDashboard` from the custom menu.
- * This is a best practice in Apps Script to ensure the global scope is correctly
- * handled when a function is called from a UI element.
+ * This is a best practice in Apps Script, as calling a function directly from the UI
+ * can sometimes lead to context or permission issues. This wrapper ensures the function
+ * executes in the correct global context.
+ *
  * @returns {void}
  */
 function updateDashboard_wrapper() {
@@ -33,7 +37,9 @@ function updateDashboard_wrapper() {
 
 /**
  * A wrapper function to call `initializeLastEditFormulas` from the custom menu.
- * It also displays an alert to the user upon completion.
+ * It provides a clear success message to the user via a UI alert upon completion,
+ * confirming that the backfill operation has finished.
+ *
  * @returns {void}
  */
 function initializeLastEditFormulas_wrapper() {
@@ -43,12 +49,14 @@ function initializeLastEditFormulas_wrapper() {
 
 
 /**
- * The main, one-time setup routine for the entire project. This function is called from the custom menu
- * and performs the following critical setup steps:
- * 1. Installs the installable `onEdit` trigger required for all automations.
- * 2. Ensures the "Last Edit" tracking columns are present on all configured sheets.
- * 3. Initializes the external logging system by creating the log spreadsheet and the current month's log sheet.
- * It provides user feedback via UI alerts for both success and failure.
+ * The main, one-time setup routine for the entire project, executed from the custom menu.
+ * This function is critical for new deployments or for repairing a broken installation. It performs:
+ * 1. **Trigger Installation:** Idempotently installs the `onEdit` and `onOpen` triggers required for automations.
+ * 2. **Column Creation:** Ensures "Last Edit" tracking columns are present on all configured sheets.
+ * 3. **Logging Initialization:** Sets up the external logging system, which may require user authorization
+ *    on the first run to create and manage a separate log spreadsheet.
+ * It provides clear user feedback via UI alerts for both success and failure scenarios.
+ *
  * @returns {void}
  */
 function setup() {
@@ -81,8 +89,10 @@ function setup() {
 
 /**
  * Idempotently installs the required installable `onEdit` trigger for the spreadsheet.
- * It first checks if a trigger for the `onEdit` function already exists. If not, it creates one.
- * This prevents the creation of duplicate triggers.
+ * "Idempotent" means that running this function multiple times will not create duplicate triggers.
+ * It first scans all existing project triggers to see if one for the `onEdit` function already
+ * exists. If not, it creates it. This is crucial for preventing automations from running
+ * multiple times on a single edit.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to which the trigger will be attached.
  * @returns {void}
@@ -103,12 +113,13 @@ function installOnEditTrigger(ss) {
 }
 
 /**
- * Idempotently installs an `onOpen` trigger for the log sorting function.
- * It checks if a trigger for `sortLogSheetsOnOpen` already exists to prevent duplicates.
- * This trigger ensures that the external log spreadsheet is sorted every time the main
- * project spreadsheet is opened.
+ * Idempotently installs an `onOpen` trigger for the log sorting function (`sortLogSheetsOnOpen`).
+ * This function ensures that the external log spreadsheet is automatically sorted every time
+ * the main project spreadsheet is opened, keeping the latest logs at the top for easy viewing.
+ * It checks for a pre-existing trigger to avoid creating duplicates.
  *
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to which the trigger will be attached.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to which the `onOpen` trigger will be attached.
+ * @returns {void}
  */
 function installOnOpenTriggerForLogs(ss) {
   const triggers = ScriptApp.getProjectTriggers();

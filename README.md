@@ -94,14 +94,19 @@ To ensure a deployment was successful, perform the following 2-minute smoke test
 
 The core logic is located in the `src/` directory.
 
-*   `Config.gs`: A centralized configuration file for all settings, including sheet names, column mappings, and status strings.
+*   `Config.gs`: A centralized configuration file for all settings, including sheet names, column mappings, and status strings. **All application settings should be changed here.**
 *   `Automations.gs`: Contains the main `onEdit` trigger, which routes edits to the appropriate handler functions. It also defines the logic for data synchronization and the configurations for data transfers.
-*   `TransferEngine.gs`: A generic, reusable engine that executes the data transfers based on the configurations provided by `Automations.gs`.
+*   `TransferEngine.gs`: A generic, reusable engine that executes the data transfers based on the configurations provided by `Automations.gs`. It handles locking, duplicate checking, and data mapping.
 *   `Dashboard.gs`: Contains all the logic for generating the dynamic dashboard, including data processing, formatting, and chart creation.
 *   `LastEditService.gs`: Manages the "Last Edit" tracking columns, including their creation and automatic updates.
 *   `LoggerService.gs`: Handles the external audit logging to a separate spreadsheet and the email notifications for errors.
 *   `Setup.gs`: Manages the creation of the custom UI menu (`onOpen`) and the one-time setup routine for installing triggers and initializing services.
 *   `Utilities.gs`: A collection of shared helper functions used throughout the project for tasks like data normalization, lookups, and date formatting.
+*   `BugFixTest.gs`: Contains a unit test for a specific bug fix related to the `TransferEngine.gs` to ensure regressions do not occur.
+
+### Code Documentation
+
+All source files in the `src/` directory are documented using JSDoc style comments. Each function has a block comment explaining its purpose, parameters, and return values. This documentation is intended to make the codebase easier to understand and maintain.
 
 ## 5. Continuous Integration (CI)
 
