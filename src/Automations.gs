@@ -73,13 +73,6 @@ function onEdit(e) {
       handler: triggerInventoryTransfer 
     },
 
-    // Fallback framing trigger (ensures framing runs if "In Progress" is set, even if the combined handler somehow missed it)
-    { 
-      sheet: FORECASTING, 
-      col: FC.PROGRESS,
-      valueCheck: (val) => normalizeString(val) === STATUS.IN_PROGRESS.toLowerCase(),
-      handler: triggerFramingTransfer 
-    }
   ];
 
   // Execute the first matching rule
