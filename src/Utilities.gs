@@ -174,6 +174,57 @@ function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
   }
 }
 
+
+/**
+ * Finds a row by an exact, case-sensitive match for a non-empty value in a specific column.
+ * This is optimized for unique identifiers like SFID.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search.
+ * @param {*} value The exact value to find. Must not be null, undefined, or an empty string.
+ * @param {number} column The 1-based column index to search within.
+ * @returns {number} The 1-based row index of the first match, or -1 if not found or invalid input.
+ */
+function findRowByValue(sheet, value, column) {
+  if (!sheet || !value || !column) return -1;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return -1;
+
+  const values = sheet.getRange(2, column, lastRow - 1, 1).getValues();
+  const searchValue = String(value);
+
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][0]) === searchValue) {
+      return i + 2; // +2 adjustment: 0-indexed loop variable + data starts on row 2
+    }
+  }
+  return -1;
+}
+
+/**
+ * Implements an SFID-first lookup strategy to find a row in a destination sheet.
+ * It first tries to find a match using the SFID. If no SFID is provided or if no match
+ * is found, it falls back to searching by the project name for backward compatibility.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search in.
+ * @param {string} sfid The Salesforce ID to search for. Can be null or empty.
+ * @param {number} sfidCol The 1-based column index for SFIDs.
+ * @param {string} projectName The project name to use as a fallback.
+ * @param {number} projectNameCol The 1-based column index for project names.
+ * @returns {number} The 1-based row index of the matched row, or -1 if not found.
+ */
+function findRowByBestIdentifier(sheet, sfid, sfidCol, projectName, projectNameCol) {
+  // 1. Prioritize SFID lookup if an SFID is provided.
+  if (sfid) {
+    const row = findRowByValue(sheet, sfid, sfidCol);
+    if (row !== -1) {
+      return row; // Found a definitive match by SFID.
+    }
+  }
+  // 2. Fallback to Project Name lookup for backward compatibility.
+  return findRowByProjectNameRobust(sheet, projectName, projectNameCol);
+}
+
 /**
  * Gets a sheet by its name. If the sheet does not exist, it creates a new one with that name.
  *
