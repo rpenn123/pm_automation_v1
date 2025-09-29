@@ -151,6 +151,17 @@ function readForecastingData(forecastSheet) {
   }
 }
 
+function ensureHiddenColumnCapacity_(sheet, startCol, endCol, minWidthNeeded) {
+  const requiredEnd = startCol + minWidthNeeded - 1;
+  const maxCol = sheet.getMaxColumns();
+  if (maxCol < requiredEnd) sheet.insertColumnsAfter(maxCol, requiredEnd - maxCol);
+  if (endCol < requiredEnd) sheet.hideColumns(startCol, requiredEnd - startCol + 1);
+}
+
+function clearHiddenBlock_(sheet, startRow, startCol, numRows, numCols) {
+  sheet.getRange(startRow, startCol, numRows, numCols).clearContent().clearDataValidations().clearNote();
+}
+
 /**
  * Processes the raw forecasting data in a single, efficient pass to generate all dashboard metrics.
  * This is a key performance optimization. Instead of iterating over the data multiple times for
@@ -208,7 +219,7 @@ function processForecastingData(forecastingValues) {
       if (deadlineDate > today) {
         monthData[1]++; // Upcoming
         grandTotals[0]++;
-      } else if (isActuallyInProgress && !isActuallyScheduled) {
+      } else if (isActuallyInProgress) {
         monthData[2]++; // Overdue
         grandTotals[1]++;
         allOverdueItems.push(row);
@@ -395,100 +406,74 @@ function hideDataColumns(sheet) {
     sheet.hideColumns(DL.HIDE_COL_START, DL.HIDE_COL_END - DL.HIDE_COL_START + 1);
 }
 
-/**
- * Creates or updates the dashboard charts. This function first removes any existing charts
- * to ensure a clean slate. It then creates a temporary, hidden sheet to stage the data for
- * each chart, which is a robust method for building charts programmatically. It generates
- * two charts: one for past months and one for upcoming months, and includes on-sheet
- * placeholder feedback if no data is available for a chart.
- *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet where charts will be inserted.
- * @param {Date[]} months An array of Date objects representing all months in the dashboard's range.
- * @param {any[][]} dashboardData A 2D array of the processed monthly summary data.
- * @returns {void}
- */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
-    sheet.getCharts().forEach(chart => sheet.removeChart(chart));
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const tempSheetName = "TempChartData_Dashboard_v4"; // Versioned to avoid conflicts
-    let tempSheet = ss.getSheetByName(tempSheetName);
-    if (tempSheet) ss.deleteSheet(tempSheet);
-    tempSheet = ss.insertSheet(tempSheetName).hideSheet();
+  sheet.getCharts().forEach(chart => sheet.removeChart(chart));
 
-    try {
-        const DC = CONFIG.DASHBOARD_CHARTING;
-        const DL = CONFIG.DASHBOARD_LAYOUT;
-        const DF = CONFIG.DASHBOARD_FORMATTING.CHART_COLORS;
-        const timeZone = ss.getSpreadsheetTimeZone();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const DC = CONFIG.DASHBOARD_CHARTING;
+  const DL = CONFIG.DASHBOARD_LAYOUT;
+  const DF = CONFIG.DASHBOARD_FORMATTING.CHART_COLORS;
 
-        const createChart = (title, data, headers, colors, anchorRow) => {
-            tempSheet.clearContents();
-            tempSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-            tempSheet.getRange(2, 1, data.length, headers.length).setValues(data);
-            const dataRange = tempSheet.getRange(1, 1, data.length + 1, headers.length);
-            const chart = sheet.newChart().asColumnChart()
-                .addRange(dataRange)
-                .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
-                .setNumHeaders(1)
-                .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_ROWS)
-                .setOption('title', title)
-                .setOption('width', DC.CHART_WIDTH)
-                .setOption('height', DC.CHART_HEIGHT)
-                .setOption('colors', colors)
-                .setOption('legend', { position: 'top' })
-                .setPosition(anchorRow, DL.CHART_ANCHOR_COL, 0, 0)
-                .build();
-            sheet.insertChart(chart);
-        };
+  ensureHiddenColumnCapacity_(sheet, DL.HIDE_COL_START, DL.HIDE_COL_END, 10);
 
-        const today = new Date();
-        today.setDate(1);
-        today.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setDate(1); today.setHours(0,0,0,0);
+  const pastStart = new Date(today); pastStart.setMonth(pastStart.getMonth() - DC.PAST_MONTHS_COUNT);
+  const upcomingEnd = new Date(today); upcomingEnd.setMonth(upcomingEnd.getMonth() + DC.UPCOMING_MONTHS_COUNT);
 
-        const pastStartDate = new Date(today.getTime());
-        pastStartDate.setMonth(pastStartDate.getMonth() - DC.PAST_MONTHS_COUNT);
+  const allRows = months.map((m, i) => [m, dashboardData[i][2], dashboardData[i][1], dashboardData[i][0]]);
+  const pastRows = allRows.filter(r => r[0] >= pastStart && r[0] < today);
+  const upRows   = allRows.filter(r => r[0] >= today && r[0] < upcomingEnd);
 
-        const upcomingEndDate = new Date(today.getTime());
-        upcomingEndDate.setMonth(upcomingEndDate.getMonth() + DC.UPCOMING_MONTHS_COUNT);
+  const PAST_COL  = DL.HIDE_COL_START;
+  const UP_COL    = DL.HIDE_COL_START + 6;
+  const START_ROW = 2;
+  const HEADER    = [["Month","Overdue","Upcoming","Total"]];
 
-        const combinedData = months.map((month, i) => ({
-            month: month,
-            monthLabel: Utilities.formatDate(month, timeZone, "MMM yyyy"),
-            overdue: dashboardData[i][2],
-            upcoming: dashboardData[i][1],
-            total: dashboardData[i][0]
-        }));
+  clearHiddenBlock_(sheet, START_ROW, PAST_COL, 300, 4);
+  clearHiddenBlock_(sheet, START_ROW, UP_COL,   300, 4);
 
-        const pastData = combinedData.filter(d => d.month >= pastStartDate && d.month < today)
-                                     .map(d => [d.monthLabel, d.overdue, d.total]);
+  sheet.getRange(START_ROW, PAST_COL, 1, 4).setValues(HEADER);
+  sheet.getRange(START_ROW, UP_COL,   1, 4).setValues(HEADER);
 
-        const upcomingData = combinedData.filter(d => d.month >= today && d.month < upcomingEndDate)
-                                         .map(d => [d.monthLabel, d.upcoming, d.total]);
+  if (pastRows.length > 0) {
+    sheet.getRange(START_ROW + 1, PAST_COL, pastRows.length, 4).setValues(pastRows);
+    sheet.getRange(START_ROW + 1, PAST_COL, pastRows.length, 1).setNumberFormat("mmm yyyy");
+  }
 
-        if (pastData.length > 0) {
-            createChart(`Past ${pastData.length} Months: Overdue vs. Total`, pastData, ['Month', 'Overdue', 'Total'], [DF.overdue, DF.total], DL.CHART_START_ROW);
-        } else {
-            const message = `No project data found for the past ${DC.PAST_MONTHS_COUNT} months.`;
-            displayChartPlaceholder(sheet, DL.CHART_START_ROW, DL.CHART_ANCHOR_COL, message);
-            Logger.log(`Skipping 'Past Months' chart: No data in the specified date range.`);
-        }
+  if (upRows.length > 0) {
+    sheet.getRange(START_ROW + 1, UP_COL, upRows.length, 4).setValues(upRows);
+    sheet.getRange(START_ROW + 1, UP_COL, upRows.length, 1).setNumberFormat("mmm yyyy");
+  }
 
-        if (upcomingData.length > 0) {
-            createChart(`Next ${upcomingData.length} Months: Upcoming vs. Total`, upcomingData, ['Month', 'Upcoming', 'Total'], [DF.upcoming, DF.total], DL.CHART_START_ROW + DC.ROW_SPACING);
-        } else {
-            const message = `No project data found for the next ${DC.UPCOMING_MONTHS_COUNT} months.`;
-            displayChartPlaceholder(sheet, DL.CHART_START_ROW + DC.ROW_SPACING, DL.CHART_ANCHOR_COL, message);
-            Logger.log(`Skipping 'Upcoming Months' chart: No data in the specified date range.`);
-        }
+  const buildChart_ = (title, leftCol, rowsCount, anchorRow) => {
+    if (rowsCount <= 0) return null;
+    const range = sheet.getRange(START_ROW, leftCol, rowsCount + 1, 4);
+    return sheet.newChart().asColumnChart()
+      .addRange(range)
+      .setNumHeaders(1)
+      .setHiddenDimensionStrategy(Charts.ChartHiddenDimensionStrategy.IGNORE_ROWS)
+      .setOption('title', title)
+      .setOption('width', DC.CHART_WIDTH)
+      .setOption('height', DC.CHART_HEIGHT)
+      .setOption('colors', [DF.overdue, DF.upcoming, DF.total])
+      .setOption('legend', { position: 'top' })
+      .setPosition(anchorRow, DL.CHART_ANCHOR_COL, 0, 0)
+      .build();
+  };
 
-    } catch (e) {
-        Logger.log(`A critical error occurred in createOrUpdateDashboardCharts: ${e.message}\n${e.stack}`);
-    } finally {
-        // Cleanup the temporary sheet
-        if (ss.getSheetByName(tempSheetName)) {
-            ss.deleteSheet(tempSheet);
-        }
-    }
+  if (pastRows.length > 0) {
+    const c = buildChart_(`Past ${pastRows.length} Months: Overdue, Upcoming, Total`, PAST_COL, pastRows.length, DL.CHART_START_ROW);
+    if (c) sheet.insertChart(c);
+  } else {
+    displayChartPlaceholder(sheet, DL.CHART_START_ROW, DL.CHART_ANCHOR_COL, `No project data found for the past ${DC.PAST_MONTHS_COUNT} months.`);
+  }
+
+  if (upRows.length > 0) {
+    const c = buildChart_(`Next ${upRows.length} Months: Overdue, Upcoming, Total`, UP_COL, upRows.length, DL.CHART_START_ROW + DC.ROW_SPACING);
+    if (c) sheet.insertChart(c);
+  } else {
+    displayChartPlaceholder(sheet, DL.CHART_START_ROW + DC.ROW_SPACING, DL.CHART_ANCHOR_COL, `No project data found for the next ${DC.UPCOMING_MONTHS_COUNT} months.`);
+  }
 }
 
 /**
