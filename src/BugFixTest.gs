@@ -100,3 +100,77 @@ function runTransferWidthBugTest() {
     Logger.log("Test failed with an error: " + error.toString());
   }
 }
+
+/**
+ * Test case to demonstrate the bug in compound key duplicate checking in `executeTransfer`.
+ * This test sets up a scenario where a compound key (e.g., Project + Deadline) is used
+ * for duplicate checking. The bug causes the source value for the compound key to be
+ * read from the wrong row.
+ *
+ * TO RUN THIS TEST:
+ * 1. Open the Google Apps Script editor.
+ * 2. Select this function (`runCompoundKeyBugTest`) from the function dropdown.
+ * 3. Click "Run".
+ * 4. Inspect the "Test_Destination" sheet and the logs.
+ *
+ * EXPECTED RESULT (BEFORE FIX):
+ * The transfer will be SKIPPED. The log will incorrectly show "Duplicate found".
+ * The "Test_Destination" sheet will only have 1 entry for "Project Compound".
+ *
+ * EXPECTED RESULT (AFTER FIX):
+ * The transfer will SUCCEED. A new row will be added to "Test_Destination".
+ * The sheet will have 2 entries for "Project Compound" with different deadlines.
+ */
+function runCompoundKeyBugTest() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const { sourceSheet, destSheet } = setupTestSheets(ss);
+
+  // Modify headers for this specific test
+  sourceSheet.getRange("A1:C1").setValues([["Project", "Status", "Deadline"]]);
+  destSheet.getRange("A1:B1").setValues([["Project_Name", "Deadline_Date"]]);
+
+  // 1. Add existing data to the destination sheet.
+  destSheet.getRange("A2:B2").setValues([["Project Compound", "2025-01-01"]]);
+
+  // 2. Add source data that should trigger a transfer.
+  // It's the same project name but a DIFFERENT deadline.
+  sourceSheet.getRange("A2:C2").setValues([["Project Compound", "In Progress", "2025-08-15"]]);
+
+  // 3. Create a mock onEdit event object for the source row.
+  const e = {
+    range: sourceSheet.getRange("B2"), // The edit happens on the "Status" column
+    source: ss
+  };
+
+  // 4. Define the transfer configuration with a compound key.
+  // This configuration is specifically designed to expose the bug:
+  // The "Deadline" (column 3) is NOT in `destinationColumnMapping` but IS required
+  // for the `compoundKeySourceCols`. The fix ensures it's read anyway.
+  const compoundKeyConfig = {
+    transferName: "Compound Key Bug Test",
+    destinationSheetName: "Test_Destination",
+    sourceColumnsNeeded: [1], // Only Project Name is strictly needed for the mapping
+    destinationColumnMapping: {
+      1: 1, // Project -> Project_Name
+      // NOTE: Deadline (col 3) is NOT mapped to the destination.
+    },
+    duplicateCheckConfig: {
+      checkEnabled: true,
+      projectNameSourceCol: 1,    // Project
+      projectNameDestCol: 1,      // Project_Name
+      compoundKeySourceCols: [3], // Deadline (This is the crucial part)
+      compoundKeyDestCols: [2],   // Deadline_Date
+      keySeparator: "|"
+    }
+  };
+
+  // 5. Execute the transfer.
+  try {
+    Logger.log("Starting Compound Key Bug Test. Checking for 'Project Compound' with deadline '2025-08-15'.");
+    executeTransfer(e, compoundKeyConfig);
+    SpreadsheetApp.flush();
+    Logger.log("Test finished. Check the 'Test_Destination' sheet and logs for success or failure.");
+  } catch (error) {
+    Logger.log("Test failed with an error: " + error.toString());
+  }
+}
