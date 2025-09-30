@@ -166,10 +166,14 @@ function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
     if (found) return found.getRow();
 
     const vals = range.getValues();
-    const target = searchNameTrimmed.toLowerCase();
+    // Use formatValueForKey to handle dates and other types consistently.
+    const targetKey = formatValueForKey(searchNameTrimmed);
     for (let i = 0; i < vals.length; i++) {
       const v = vals[i][0];
-      if (v && String(v).trim().toLowerCase() === target) return i + 2; // +2 for 0-index and header row
+      // By using the same key format, we can correctly compare strings to Date objects.
+      if (v && formatValueForKey(v) === targetKey) {
+        return i + 2; // +2 for 0-index and header row
+      }
     }
     return -1;
   } catch (error) {
