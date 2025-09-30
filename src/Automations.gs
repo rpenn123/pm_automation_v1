@@ -162,10 +162,14 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx) {
 
     if (row !== -1) {
       const targetCell = upcomingSheet.getRange(row, UP.PROGRESS);
-      if (normalizeForComparison(targetCell.getValue()) !== normalizeForComparison(newValue)) {
+      const currentValueStr = normalizeForComparison(targetCell.getValue());
+      const newValueStr = normalizeForComparison(newValue);
+
+      // Only write if the value is different to avoid re-triggering onEdit.
+      if (currentValueStr !== newValueStr) {
         targetCell.setValue(newValue);
         updateLastEditForRow(upcomingSheet, row);
-        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" });
+        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress ${currentValueStr} -> ${newValueStr}`, result: "updated" });
       } else {
         logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
       }
@@ -183,13 +187,13 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx) {
 
 /**
  * Synchronizes the 'Progress' value from 'Upcoming' back to 'Forecasting'.
- * Uses a script lock to prevent race conditions.
+ * This is the counterpart to `syncProgressToUpcoming` and completes the two-way sync.
  *
- * @param {string} sfid The Salesforce ID of the project.
- * @param {string} projectName The name of the project (fallback).
+ * @param {string} sfid The Salesforce ID of the project to sync.
+ * @param {string} projectName The name of the project to sync (used as a fallback).
  * @param {*} newValue The new value of the 'Progress' cell.
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet.
- * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event for logging.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event object for detailed logging context.
  * @returns {void}
  */
 function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx) {
@@ -215,10 +219,14 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx) {
 
     if (row !== -1) {
       const targetCell = forecastingSheet.getRange(row, FC.PROGRESS);
-      if (normalizeForComparison(targetCell.getValue()) !== normalizeForComparison(newValue)) {
+      const currentValueStr = normalizeForComparison(targetCell.getValue());
+      const newValueStr = normalizeForComparison(newValue);
+
+      // Only write if the value is different.
+      if (currentValueStr !== newValueStr) {
         targetCell.setValue(newValue);
         updateLastEditForRow(forecastingSheet, row);
-        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" });
+        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress ${currentValueStr} -> ${newValueStr}`, result: "updated" });
       } else {
         logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
       }
