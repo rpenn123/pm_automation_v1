@@ -1,0 +1,14 @@
+{
+  "name": "pm-automation-v1",
+  "version": "1.0.0",
+  "description": "Google Sheets Automation & Dashboard",
+  "scripts": {
+    "deploy:test": "node scripts/deploy.js test",
+    "deploy:prod": "node scripts/deploy.js prod",
+    "validate-config": "node scripts/validate-config.js"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "fs-extra": "^11.1.1"
+  }
+}

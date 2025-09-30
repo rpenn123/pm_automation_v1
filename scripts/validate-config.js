@@ -1,5 +1,5 @@
-// scripts/validate-deploy.js
-// Fails CI if .clasp.*.json is invalid, has a BOM, or points to a missing appsscript.json
+// scripts/validate-config.js
+// Fails CI if config/.clasp.*.json is invalid, has a BOM, or points to a missing appsscript.json
 
 const fs = require('fs');
 const path = require('path');
@@ -56,8 +56,8 @@ function ensureClaspJsonNotCommitted() {
 
 try {
   ensureClaspJsonNotCommitted();
-  checkConfig('.clasp.test.json');
-  checkConfig('.clasp.prod.json');
+  checkConfig('config/.clasp.test.json');
+  checkConfig('config/.clasp.prod.json');
   console.log('Validation passed.');
 } catch (e) {
   console.error(e.message);

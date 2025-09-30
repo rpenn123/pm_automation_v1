@@ -1,5 +1,5 @@
-# Deployment env swap
+# Dependencies
+node_modules/
+
+# Clasp
 .clasp.json
-
-__old_src_backup_*
-
