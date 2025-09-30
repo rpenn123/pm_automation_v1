@@ -67,17 +67,25 @@ function updateDashboard() {
       const numDataRows = dashboardData.length;
 
       // Batch write dashboard table
-      const yearMonthData = months.map(function(date) { return [date.getFullYear(), date]; });
+      const tableData = months.map(function(month, i) {
+        const summary = dashboardData[i]; // [total, upcoming, overdue, approved]
+        return [
+          month.getFullYear(), // Year
+          month,               // Month
+          summary[0],          // Total Projects
+          summary[1],          // Upcoming
+          null,                // Placeholder for Overdue formula, which is set next
+          summary[3]           // Approved
+        ];
+      });
+
       const overdueFormulas = dashboardData.map(function(row) {
         return ['=HYPERLINK("#gid=' + overdueSheetGid + '", ' + (row[2] || 0) + ')'];
       });
-      // [total, upcoming, approved]
-      const otherData = dashboardData.map(function(row) { return [row[0], row[1], row[3]]; });
 
-      dashboardSheet.getRange(dataStartRow, DL.YEAR_COL, numDataRows, 2).setValues(yearMonthData);
-      dashboardSheet.getRange(dataStartRow, DL.TOTAL_COL, numDataRows, 2).setValues(otherData.map(function(r){ return [r[0], r[1]]; }));
+      // Write main data block, then overwrite the formula column
+      dashboardSheet.getRange(dataStartRow, DL.YEAR_COL, numDataRows, 6).setValues(tableData);
       dashboardSheet.getRange(dataStartRow, DL.OVERDUE_COL, numDataRows, 1).setFormulas(overdueFormulas);
-      dashboardSheet.getRange(dataStartRow, DL.APPROVED_COL, numDataRows, 1).setValues(otherData.map(function(r){ return [r[2]]; }));
 
       // Grand totals, now aligned with monthlySummaries: [total, upcoming, overdue, approved]
       const gtTotal    = grandTotals[0];
@@ -148,7 +156,7 @@ function readForecastingData(forecastSheet) {
  * Single-pass processing that builds monthly summaries and totals.
  * Returns:
  * - monthlySummaries: Map key "YYYY-M" -> [total, upcoming, overdue, approved]
- * - grandTotals: [upcoming, overdue, total, approved]
+ * - grandTotals: [total, upcoming, overdue, approved]
  */
 function processForecastingData(forecastingValues) {
   const monthlySummaries = new Map();
