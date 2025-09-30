@@ -15,12 +15,13 @@
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss] The spreadsheet where the error occurred. Defaults to the active spreadsheet if not provided.
  */
 function notifyError(subjectDetails, error, ss) {
-  const email = CONFIG.ERROR_NOTIFICATION_EMAIL;
+  const props = PropertiesService.getScriptProperties();
+  const email = props.getProperty(CONFIG.LOGGING.ERROR_EMAIL_PROP);
   const appName = CONFIG.APP_NAME;
 
   // Validate email format
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
-    Logger.log(`Error email skipped due to invalid email address: "${email}"`);
+    Logger.log(`Error email skipped: No valid notification email has been set. Please run the setup menu to configure it.`);
     return;
   }
 

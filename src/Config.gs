@@ -10,8 +10,6 @@ const CONFIG = {
   APP_NAME: "Sheet Automations & Dashboard",
   
   // --- General Settings ---
-  ERROR_NOTIFICATION_EMAIL: "rpenn@mobility123.com",
-
   // --- Sheet Names ---
   SHEETS: {
     FORECASTING: "Forecasting",
@@ -86,7 +84,8 @@ const CONFIG = {
   // --- External Logging Configuration ---
   LOGGING: {
     SPREADSHEET_NAME: "Sheet Automations Logs",
-    SPREADSHEET_ID_PROP: "LOG_SPREADSHEET_ID" // Script property key
+    SPREADSHEET_ID_PROP: "LOG_SPREADSHEET_ID", // Script property key
+    ERROR_EMAIL_PROP: "ERROR_NOTIFICATION_EMAIL" // Script property key
   },
 
   // ================= DASHBOARD SPECIFIC CONFIG =================

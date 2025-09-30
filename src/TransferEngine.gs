@@ -39,7 +39,7 @@
  * @param {boolean} config.postTransferActions.sortAscending If true, sorts in ascending order; otherwise, descending.
  * @returns {void}
  */
-function executeTransfer(e, config) {
+function executeTransfer(e, config, preReadSourceRowData) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
   let appendedRow = -1;
@@ -68,14 +68,21 @@ function executeTransfer(e, config) {
       throw new Error(`Destination sheet "${config.destinationSheetName}" not found`);
     }
 
-    // Read source data efficiently
-    const mappedSourceCols = Object.keys(config.destinationColumnMapping || {}).map(Number);
-    const compoundKeyCols = (config.duplicateCheckConfig && config.duplicateCheckConfig.compoundKeySourceCols) || [];
-    const maxSourceColNeeded = Math.max(...(config.sourceColumnsNeeded || []), ...mappedSourceCols, ...compoundKeyCols);
-    const actualLastSourceCol = sourceSheet.getLastColumn();
-    const readWidth = Math.min(maxSourceColNeeded, actualLastSourceCol);
-    // Read the necessary part of the row in a single batch
-    const sourceRowData = sourceSheet.getRange(editedRow, 1, 1, readWidth).getValues()[0];
+    // Read source data efficiently, or use pre-read data if available
+    let sourceRowData = preReadSourceRowData;
+    let readWidth;
+
+    if (sourceRowData) {
+      readWidth = sourceRowData.length;
+    } else {
+      const mappedSourceCols = Object.keys(config.destinationColumnMapping || {}).map(Number);
+      const compoundKeyCols = (config.duplicateCheckConfig && config.duplicateCheckConfig.compoundKeySourceCols) || [];
+      const maxSourceColNeeded = Math.max(...(config.sourceColumnsNeeded || []), ...mappedSourceCols, ...compoundKeyCols);
+      const actualLastSourceCol = sourceSheet.getLastColumn();
+      readWidth = Math.min(maxSourceColNeeded, actualLastSourceCol);
+      // Read the necessary part of the row in a single batch
+      sourceRowData = sourceSheet.getRange(editedRow, 1, 1, readWidth).getValues()[0];
+    }
 
     // Identify SFID and Project Name for logging and duplicate checks
     const { sfidSourceCol, projectNameSourceCol } = config.duplicateCheckConfig || {};
