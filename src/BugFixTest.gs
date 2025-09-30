@@ -176,3 +176,82 @@ function testIsDuplicateInDestination_TimezoneBug() {
     throw new Error(`${testName}: Assertion failed.`);
   }
 }
+
+
+/**
+ * A specific unit test to verify a bug fix in the `findRowByProjectNameRobust` function.
+ *
+ * **Bug Context:** The `findRowByProjectNameRobust` function could fail if the project
+ * name being searched for was a date. The string representation of a Date object in a cell
+ * (e.g., "Tue Oct 31 2024...") would not match the simple search string (e.g., "2024-10-31").
+ *
+ * **Test Scenario:**
+ * 1.  **Mocks** a sheet where a "Project Name" is a `Date` object.
+ * 2.  **Defines** a search term that is a string representation of that date.
+ * 3.  **Executes** `findRowByProjectNameRobust`.
+ * 4.  **Asserts** that the function correctly returns the row number `2`, proving that the
+ *     lookup can handle the type mismatch between the search string and the cell's Date object.
+ *
+ * @returns {void} Throws an error if the assertion fails.
+ */
+function testFindRowByProjectName_DateInProjectName() {
+  const testName = "testFindRowByProjectName_DateInProjectName";
+  let assertions = 0;
+
+  // Mock sheet object where a project name is a Date
+  const mockSheet = {
+    _data: [
+      ["Project Name", "Status"],
+      [new Date("2024-10-31T00:00:00.000Z"), "In Progress"]
+    ],
+    getLastRow: function() { return this._data.length; },
+    getLastColumn: function() { return this._data[0].length; },
+    getRange: function(row, col, numRows, numCols) {
+      const self = this;
+      const range = {
+        getValues: function() {
+          const result = [];
+          for (let i = 0; i < numRows; i++) {
+            const rowData = self._data[row + i - 1];
+            if (rowData) {
+              result.push(rowData.slice(col - 1, col - 1 + numCols));
+            }
+          }
+          return result;
+        },
+        // Mock text finder for robustness check
+        createTextFinder: function(text) {
+            return {
+                matchCase: function() { return this; },
+                matchEntireCell: function() { return this; },
+                findNext: function() { return null; } // Simulate TextFinder failing to force fallback
+            };
+        }
+      };
+      return range;
+    },
+    // The robust function needs a parent to call getParent() on error
+    getParent: function() { return null; }
+  };
+
+  // The project name to search for (as a string)
+  const projectNameToFind = "2024-10-31";
+  const projectNameCol = 1;
+
+  // Execute the function under test
+  // NOTE: This test will FAIL until the fix is applied in Utilities.gs
+  const foundRow = findRowByProjectNameRobust(mockSheet, projectNameToFind, projectNameCol);
+
+  // Assert the result
+  const expectedRow = 2;
+  if (foundRow === expectedRow) {
+    console.log(`✅ ${testName}: PASSED - Correctly found row ${expectedRow}.`);
+    assertions++;
+  } else {
+    console.error(`❌ ${testName}: FAILED - Expected row ${expectedRow}, but got ${foundRow}.`);
+  }
+
+  if (assertions !== 1) {
+    throw new Error(`${testName}: Assertion failed.`);
+  }
+}
