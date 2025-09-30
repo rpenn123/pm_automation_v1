@@ -196,10 +196,13 @@ function processForecastingData(forecastingValues) {
       if (deadlineDate > today) {
         monthData[1]++;   // upcoming
         grandTotals[1]++; // GT upcoming
-      } else if (isInProgress) {
+      } else { // A project that is "In Progress" OR "Scheduled" with a past-due deadline is Overdue.
         monthData[2]++;   // overdue
         grandTotals[2]++; // GT overdue
-        allOverdueItems.push(row);
+        // Per the note on the Dashboard header, only "In Progress" items appear in the drill-down.
+        if (isInProgress) {
+          allOverdueItems.push(row);
+        }
       }
     }
 
