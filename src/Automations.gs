@@ -169,7 +169,7 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx) {
       if (currentValueStr !== newValueStr) {
         targetCell.setValue(newValue);
         updateLastEditForRow(upcomingSheet, row);
-        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress ${currentValueStr} -> ${newValueStr}`, result: "updated" });
+        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" });
       } else {
         logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
       }
@@ -187,7 +187,7 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx) {
 
 /**
  * Synchronizes the 'Progress' value from 'Upcoming' back to 'Forecasting'.
- * This is the counterpart to `syncProgressToUpcoming` and completes the two-way sync.
+ * Uses a script lock to prevent race conditions.
  *
  * @param {string} sfid The Salesforce ID of the project to sync.
  * @param {string} projectName The name of the project to sync (used as a fallback).
@@ -226,7 +226,7 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx) {
       if (currentValueStr !== newValueStr) {
         targetCell.setValue(newValue);
         updateLastEditForRow(forecastingSheet, row);
-        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress ${currentValueStr} -> ${newValueStr}`, result: "updated" });
+        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" });
       } else {
         logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
       }
