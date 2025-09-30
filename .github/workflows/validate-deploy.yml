@@ -1,4 +1,4 @@
-name: Validate deploy configs
+name: Validate Deploy Configs
 
 on:
   pull_request:
@@ -14,5 +14,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-      - name: Validate deploy files
-        run: node scripts/validate-deploy.js
+          cache: 'npm' # Cache npm dependencies
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Validate Deploy Configs
+        run: npm run validate-config
