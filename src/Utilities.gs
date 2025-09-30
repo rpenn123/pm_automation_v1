@@ -200,7 +200,8 @@ function findRowByValue(sheet, value, column) {
   const searchValue = String(value);
 
   for (let i = 0; i < values.length; i++) {
-    if (String(values[i][0]) === searchValue) {
+    // Trim the sheet value to make the comparison robust against whitespace.
+    if (String(values[i][0]).trim() === searchValue) {
       return i + 2; // +2 adjustment: 0-indexed loop variable + data starts on row 2
     }
   }
