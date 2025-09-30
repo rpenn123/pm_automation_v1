@@ -91,3 +91,88 @@ function testIsDuplicateInDestination_DateInProjectName() {
     throw new Error(`${testName}: One or more assertions failed.`);
   }
 }
+
+
+/**
+ * A specific unit test to verify the timezone bug fix in `isDuplicateInDestination`.
+ *
+ * **Bug Context:** The `formatValueForKey` function previously used the script's local
+ * timezone. This meant a UTC date like `2024-10-31T02:00:00Z` could be formatted as
+ * `"2024-10-30"` if the script ran in a timezone like `America/New_York`. This test
+ * simulates that exact scenario.
+ *
+ * **Test Scenario:**
+ * 1.  **Mocks** a destination sheet where the project name is a `Date` object representing
+ *     an early morning UTC time.
+ * 2.  **Defines** source data where the `projectName` is a string matching the *correct* UTC date.
+ * 3.  **Executes** `isDuplicateInDestination`. With the bug, this would fail because the
+ *     destination date would be formatted as the previous day.
+ * 4.  **Asserts** that the function returns `true`, proving that the UTC-based formatting
+ *     now works correctly, preventing timezone-related mis-matches.
+ *
+ * @returns {void} Throws an error if the assertion fails.
+ */
+function testIsDuplicateInDestination_TimezoneBug() {
+  const testName = "testIsDuplicateInDestination_TimezoneBug";
+  let assertions = 0;
+
+  // Mock destination sheet with a date that would be the previous day in a non-UTC timezone
+  const mockSheet = {
+    _data: [
+      ["Project Name", "Deadline"],
+      // This is 2 AM UTC on Oct 31. In America/New_York, it's still Oct 30.
+      [new Date("2024-10-31T02:00:00.000Z"), "Some Value"]
+    ],
+    getLastRow: function() { return this._data.length; },
+    getLastColumn: function() { return this._data[0].length; },
+    getRange: function(row, col, numRows, numCols) {
+      const self = this;
+      return {
+        getValues: function() {
+          const result = [];
+          for (let i = 0; i < numRows; i++) {
+            const rowData = self._data[row + i - 1];
+            if (rowData) {
+              result.push(rowData.slice(col - 1, col - 1 + numCols));
+            }
+          }
+          return result;
+        }
+      };
+    }
+  };
+
+  // Source project name is a string representing the correct UTC date.
+  const projectName = "2024-10-31";
+  const sourceRowData = [projectName, "Some Value"];
+  const sourceReadWidth = sourceRowData.length;
+
+  // Config for duplicate check (no compound key needed for this test)
+  const dupConfig = {
+    projectNameDestCol: 1,
+    compoundKeySourceCols: [],
+    compoundKeyDestCols: []
+  };
+
+  // Execute the function
+  const isDuplicate = isDuplicateInDestination(
+    mockSheet,
+    null, // sfid
+    projectName,
+    sourceRowData,
+    sourceReadWidth,
+    dupConfig
+  );
+
+  // Assert
+  if (isDuplicate === true) {
+    console.log(`✅ ${testName}: PASSED - Correctly identified duplicate despite timezone difference.`);
+    assertions++;
+  } else {
+    console.error(`❌ ${testName}: FAILED - Did not identify duplicate. Expected true, got ${isDuplicate}.`);
+  }
+
+  if (assertions !== 1) {
+    throw new Error(`${testName}: Assertion failed.`);
+  }
+}

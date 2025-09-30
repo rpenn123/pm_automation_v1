@@ -95,7 +95,7 @@ function parseAndNormalizeDate(value) {
  */
 function formatValueForKey(value) {
   if (value instanceof Date && !isNaN(value.getTime())) {
-    return Utilities.formatDate(value, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    return Utilities.formatDate(value, "UTC", "yyyy-MM-dd");
   }
   return (value !== null && value !== undefined) ? String(value).trim().toLowerCase() : "";
 }
