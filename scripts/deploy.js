@@ -3,13 +3,31 @@ const fs = require('fs-extra');
 const path = require('path');
 const { exec } = require('child_process');
 
-async function deploy() {
+function deploy() {
   const env = process.argv[2];
   if (!['test', 'prod'].includes(env)) {
     console.error('Usage: node scripts/deploy.js [test|prod]');
     process.exit(1);
   }
 
+  console.log('Pulling latest changes from Git...');
+  const gitPull = exec('git pull');
+
+  gitPull.stdout.pipe(process.stdout);
+  gitPull.stderr.pipe(process.stderr);
+
+  gitPull.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`\nError: git pull exited with code ${code}`);
+      process.exit(1);
+    }
+
+    console.log('\nGit pull successful. Starting deployment...');
+    runDeployment(env);
+  });
+}
+
+async function runDeployment(env) {
   const rootDir = process.cwd();
   const configDir = path.join(rootDir, 'config');
   const claspConfigFile = `.clasp.${env}.json`;
