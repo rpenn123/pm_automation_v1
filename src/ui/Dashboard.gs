@@ -41,7 +41,7 @@ function updateDashboard() {
     const { forecastingValues, forecastingHeaders } = read;
 
     // 2) Process
-    const processed = processForecastingData(forecastingValues, config);
+    const processed = processDashboardData(forecastingValues, config);
     const { monthlySummaries, grandTotals, allOverdueItems, missingDeadlinesCount } = processed;
     Logger.log('Processing complete. Found ' + allOverdueItems.length + ' overdue items and ' + missingDeadlinesCount + ' rows with missing deadlines.');
 
@@ -49,71 +49,18 @@ function updateDashboard() {
     populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders);
 
     // 4) Dashboard table
-    clearAndResizeSheet(dashboardSheet, config.DASHBOARD_LAYOUT.FIXED_ROW_COUNT, config.DASHBOARD_LAYOUT.HIDE_COL_END);
-    setDashboardHeaders(dashboardSheet, config);
-    setDashboardHeaderNotes(dashboardSheet, config);
-
     const months = generateMonthList(config.DASHBOARD_DATES.START, config.DASHBOARD_DATES.END);
-    const dataStartRow = 2;
-
-    // Align processed map to ordered month list
     const dashboardData = months.map(function(month) {
       const key = month.getFullYear() + '-' + month.getMonth();
-      // [total, upcoming, overdue, approved]
       return monthlySummaries.get(key) || [0, 0, 0, 0];
     });
 
-    if (dashboardData.length > 0) {
-      const DL = config.DASHBOARD_LAYOUT;
-      const numDataRows = dashboardData.length;
+    renderDashboardTable(dashboardSheet, overdueSheetGid, processed, months, dashboardData, config);
 
-      // Batch write dashboard table
-      const tableData = months.map(function(month, i) {
-        const summary = dashboardData[i]; // [total, upcoming, overdue, approved]
-        return [
-          month.getFullYear(), // Year
-          month,               // Month
-          summary[0],          // Total Projects
-          summary[1],          // Upcoming
-          null,                // Placeholder for Overdue formula, which is set next
-          summary[3]           // Approved
-        ];
-      });
-
-      const overdueFormulas = dashboardData.map(function(row) {
-        return ['=HYPERLINK("#gid=' + overdueSheetGid + '", ' + (row[2] || 0) + ')'];
-      });
-
-      // Write main data block, then overwrite the formula column
-      dashboardSheet.getRange(dataStartRow, DL.YEAR_COL, numDataRows, 6).setValues(tableData);
-      dashboardSheet.getRange(dataStartRow, DL.OVERDUE_COL, numDataRows, 1).setFormulas(overdueFormulas);
-
-      // Grand totals, now aligned with monthlySummaries: [total, upcoming, overdue, approved]
-      const gtTotal    = grandTotals[0];
-      const gtUpcoming = grandTotals[1];
-      const gtOverdue  = grandTotals[2];
-      const gtApproved = grandTotals[3];
-
-      // Note the order of assignment now matches the GT column order on the sheet
-      dashboardSheet.getRange(dataStartRow, DL.GT_UPCOMING_COL).setValue(gtUpcoming);
-      dashboardSheet.getRange(dataStartRow, DL.GT_OVERDUE_COL).setFormula('=HYPERLINK("#gid=' + overdueSheetGid + '", ' + gtOverdue + ')');
-      dashboardSheet.getRange(dataStartRow, DL.GT_TOTAL_COL).setValue(gtTotal);
-      dashboardSheet.getRange(dataStartRow, DL.GT_APPROVED_COL).setValue(gtApproved);
-
-      // Missing deadlines note
-      const missingCell = dashboardSheet.getRange(DL.MISSING_DEADLINE_CELL);
-      missingCell.setValue('Missing/Invalid Deadlines:');
-      missingCell.offset(0, 1).setValue(missingDeadlinesCount).setNumberFormat('0').setFontWeight('bold');
-      missingCell.setFontWeight('bold');
-
-      // 5) Format
-      applyDashboardFormatting(dashboardSheet, numDataRows, config);
-
-      // 6) Charts
-      if (config.DASHBOARD_CHARTING.ENABLED) {
-        createOrUpdateDashboardCharts(dashboardSheet, months, dashboardData, config);
-        hideDataColumns(dashboardSheet, config);
-      }
+    // 5) Charts
+    if (config.DASHBOARD_CHARTING.ENABLED) {
+      createOrUpdateDashboardCharts(dashboardSheet, months, dashboardData, config);
+      hideDataColumns(dashboardSheet, config);
     }
 
     SpreadsheetApp.flush();
@@ -159,7 +106,7 @@ function readForecastingData(forecastSheet, config) {
  * - monthlySummaries: Map key "YYYY-M" -> [total, upcoming, overdue, approved]
  * - grandTotals: [total, upcoming, overdue, approved]
  */
-function processForecastingData(forecastingValues, config) {
+function processDashboardData(forecastingValues, config) {
   const monthlySummaries = new Map();
   const allOverdueItems = [];
   // Standardized to [total, upcoming, overdue, approved] to match monthlySummaries
@@ -224,6 +171,66 @@ function processForecastingData(forecastingValues, config) {
 // =================================================================
 // ==================== PRESENTATION LOGIC =========================
 // =================================================================
+
+/**
+ * Renders the main data table, including headers, notes, data, formulas, and formatting.
+ */
+function renderDashboardTable(dashboardSheet, overdueSheetGid, processedData, months, dashboardData, config) {
+  const { grandTotals, missingDeadlinesCount } = processedData;
+
+  clearAndResizeSheet(dashboardSheet, config.DASHBOARD_LAYOUT.FIXED_ROW_COUNT, config.DASHBOARD_LAYOUT.HIDE_COL_END);
+  setDashboardHeaders(dashboardSheet, config);
+  setDashboardHeaderNotes(dashboardSheet, config);
+
+  const dataStartRow = 2;
+
+  if (dashboardData.length > 0) {
+    const DL = config.DASHBOARD_LAYOUT;
+    const numDataRows = dashboardData.length;
+
+    // Batch write dashboard table
+    const tableData = months.map(function(month, i) {
+      const summary = dashboardData[i]; // [total, upcoming, overdue, approved]
+      return [
+        month.getFullYear(), // Year
+        month,               // Month
+        summary[0],          // Total Projects
+        summary[1],          // Upcoming
+        null,                // Placeholder for Overdue formula, which is set next
+        summary[3]           // Approved
+      ];
+    });
+
+    const overdueFormulas = dashboardData.map(function(row) {
+      return ['=HYPERLINK("#gid=' + overdueSheetGid + '", ' + (row[2] || 0) + ')'];
+    });
+
+    // Write main data block, then overwrite the formula column
+    dashboardSheet.getRange(dataStartRow, DL.YEAR_COL, numDataRows, 6).setValues(tableData);
+    dashboardSheet.getRange(dataStartRow, DL.OVERDUE_COL, numDataRows, 1).setFormulas(overdueFormulas);
+
+    // Grand totals, now aligned with monthlySummaries: [total, upcoming, overdue, approved]
+    const gtTotal    = grandTotals[0];
+    const gtUpcoming = grandTotals[1];
+    const gtOverdue  = grandTotals[2];
+    const gtApproved = grandTotals[3];
+
+    // Note the order of assignment now matches the GT column order on the sheet
+    dashboardSheet.getRange(dataStartRow, DL.GT_UPCOMING_COL).setValue(gtUpcoming);
+    dashboardSheet.getRange(dataStartRow, DL.GT_OVERDUE_COL).setFormula('=HYPERLINK("#gid=' + overdueSheetGid + '", ' + gtOverdue + ')');
+    dashboardSheet.getRange(dataStartRow, DL.GT_TOTAL_COL).setValue(gtTotal);
+    dashboardSheet.getRange(dataStartRow, DL.GT_APPROVED_COL).setValue(gtApproved);
+
+    // Missing deadlines note
+    const missingCell = dashboardSheet.getRange(DL.MISSING_DEADLINE_CELL);
+    missingCell.setValue('Missing/Invalid Deadlines:');
+    missingCell.offset(0, 1).setValue(missingDeadlinesCount).setNumberFormat('0').setFontWeight('bold');
+    missingCell.setFontWeight('bold');
+
+    // Format
+    applyDashboardFormatting(dashboardSheet, numDataRows, config);
+  }
+}
 
 function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
   try {
