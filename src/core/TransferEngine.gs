@@ -149,7 +149,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
     appendedRow = destinationSheet.getLastRow();
     
     // Update Last Edit tracking on the destination sheet if applicable
-    if (CONFIG.LAST_EDIT.TRACKED_SHEETS.includes(config.destinationSheetName)) {
+    if (config.lastEditTrackedSheets && config.lastEditTrackedSheets.includes(config.destinationSheetName)) {
         updateLastEditForRow(destinationSheet, appendedRow);
     }
 

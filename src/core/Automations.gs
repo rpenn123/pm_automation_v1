@@ -32,19 +32,22 @@ function onEdit(e) {
   const editedCol = e.range.getColumn();
   const editedRow = e.range.getRow();
 
+  // The only function that should access the global CONFIG.
+  const config = CONFIG;
+
   // 1. Batch-read the entire edited row once for performance.
   const sourceRowData = sheet.getRange(editedRow, 1, 1, sheet.getLastColumn()).getValues()[0];
 
   // 2. Always update Last Edit tracking if applicable. This runs independently of other rules.
-  if (CONFIG.LAST_EDIT.TRACKED_SHEETS.includes(sheetName)) {
-    updateLastEditForRow(sheet, editedRow);
+  if (config.LAST_EDIT.TRACKED_SHEETS.includes(sheetName)) {
+    updateLastEditForRow(sheet, editedRow, config);
   }
 
   // 3. Route the edit event to the appropriate handler based on a set of rules.
-  const { FORECASTING, UPCOMING } = CONFIG.SHEETS;
-  const FC = CONFIG.FORECASTING_COLS;
-  const UP = CONFIG.UPCOMING_COLS;
-  const STATUS = CONFIG.STATUS_STRINGS;
+  const { FORECASTING, UPCOMING } = config.SHEETS;
+  const FC = config.FORECASTING_COLS;
+  const UP = config.UPCOMING_COLS;
+  const STATUS = config.STATUS_STRINGS;
 
   const rules = [
     { sheet: FORECASTING, col: FC.PROGRESS, handler: handleSyncAndPotentialFramingTransfer },
@@ -58,8 +61,8 @@ function onEdit(e) {
     if (sheetName === rule.sheet && editedCol === rule.col) {
       if (!rule.valueCheck || rule.valueCheck(e.value)) {
         try {
-          // Pass the pre-read row data to the handler.
-          rule.handler(e, sourceRowData);
+          // Pass the pre-read row data and the config object to the handler.
+          rule.handler(e, sourceRowData, config);
         } catch (error) {
           Logger.log(`Handler error for ${rule.sheet} Col ${rule.col}: ${error}\n${error.stack}`);
           notifyError(`Handler failed for ${rule.sheet} Col ${rule.col}`, error, e.source);
@@ -88,10 +91,11 @@ function onEdit(e) {
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
  * @param {any[]} sourceRowData The pre-read data from the edited row.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function handleSyncAndPotentialFramingTransfer(e, sourceRowData) {
-  const FC = CONFIG.FORECASTING_COLS;
+function handleSyncAndPotentialFramingTransfer(e, sourceRowData, config) {
+  const FC = config.FORECASTING_COLS;
 
   // Use the pre-read data instead of making new I/O calls.
   const sfid = sourceRowData[FC.SFID - 1];
@@ -100,12 +104,12 @@ function handleSyncAndPotentialFramingTransfer(e, sourceRowData) {
 
   // 1. Synchronization.
   if (sfid || projectName) {
-    syncProgressToUpcoming(sfid, projectName, newValue, e.source, e);
+    syncProgressToUpcoming(sfid, projectName, newValue, e.source, e, config);
   }
 
   // 2. Conditional Transfer to Framing.
-  if (normalizeString(newValue) === CONFIG.STATUS_STRINGS.IN_PROGRESS.toLowerCase()) {
-    triggerFramingTransfer(e, sourceRowData);
+  if (normalizeString(newValue) === config.STATUS_STRINGS.IN_PROGRESS.toLowerCase()) {
+    triggerFramingTransfer(e, sourceRowData, config);
   }
 }
 
@@ -114,17 +118,18 @@ function handleSyncAndPotentialFramingTransfer(e, sourceRowData) {
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
  * @param {any[]} sourceRowData The pre-read data from the edited row.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function triggerSyncToForecasting(e, sourceRowData) {
-  const UP = CONFIG.UPCOMING_COLS;
+function triggerSyncToForecasting(e, sourceRowData, config) {
+  const UP = config.UPCOMING_COLS;
 
   // Use the pre-read data.
   const sfid = sourceRowData[UP.SFID - 1];
   const projectName = sourceRowData[UP.PROJECT_NAME - 1];
 
   if (sfid || projectName) {
-    syncProgressToForecasting(sfid, projectName, e.value, e.source, e);
+    syncProgressToForecasting(sfid, projectName, e.value, e.source, e, config);
   }
 }
 
@@ -137,13 +142,14 @@ function triggerSyncToForecasting(e, sourceRowData) {
  * @param {*} newValue The new value of the 'Progress' cell.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet.
  * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event for logging.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx) {
+function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
-  const { UPCOMING } = CONFIG.SHEETS;
-  const UP = CONFIG.UPCOMING_COLS;
+  const { UPCOMING } = config.SHEETS;
+  const UP = config.UPCOMING_COLS;
   const actionName = "SyncFtoU";
   const logIdentifier = sfid ? `SFID ${sfid}` : `"${projectName}"`;
 
@@ -164,7 +170,7 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx) {
       const targetCell = upcomingSheet.getRange(row, UP.PROGRESS);
       if (normalizeForComparison(targetCell.getValue()) !== normalizeForComparison(newValue)) {
         targetCell.setValue(newValue);
-        updateLastEditForRow(upcomingSheet, row);
+        updateLastEditForRow(upcomingSheet, row, config);
         logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" });
       } else {
         logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
@@ -190,13 +196,14 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx) {
  * @param {*} newValue The new value of the 'Progress' cell.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet.
  * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original onEdit event for logging.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx) {
+function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
-  const { FORECASTING } = CONFIG.SHEETS;
-  const FC = CONFIG.FORECASTING_COLS;
+  const { FORECASTING } = config.SHEETS;
+  const FC = config.FORECASTING_COLS;
   const actionName = "SyncUtoF";
   const logIdentifier = sfid ? `SFID ${sfid}` : `"${projectName}"`;
 
@@ -217,7 +224,7 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx) {
       const targetCell = forecastingSheet.getRange(row, FC.PROGRESS);
       if (normalizeForComparison(targetCell.getValue()) !== normalizeForComparison(newValue)) {
         targetCell.setValue(newValue);
-        updateLastEditForRow(forecastingSheet, row);
+        updateLastEditForRow(forecastingSheet, row, config);
         logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" });
       } else {
         logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
@@ -243,15 +250,17 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx) {
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
  * @param {any[]} sourceRowData The pre-read data from the edited row.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function triggerUpcomingTransfer(e, sourceRowData) {
-  const FC = CONFIG.FORECASTING_COLS;
-  const UP = CONFIG.UPCOMING_COLS;
+function triggerUpcomingTransfer(e, sourceRowData, config) {
+  const FC = config.FORECASTING_COLS;
+  const UP = config.UPCOMING_COLS;
 
-  const config = {
+  const transferConfig = {
     transferName: "Upcoming Transfer (Permits)",
-    destinationSheetName: CONFIG.SHEETS.UPCOMING,
+    destinationSheetName: config.SHEETS.UPCOMING,
+    lastEditTrackedSheets: config.LAST_EDIT.TRACKED_SHEETS,
     destinationColumnMapping: createMapping([
       [FC.SFID, UP.SFID], [FC.PROJECT_NAME, UP.PROJECT_NAME], [FC.DEADLINE, UP.DEADLINE],
       [FC.PROGRESS, UP.PROGRESS], [FC.EQUIPMENT, UP.EQUIPMENT], [FC.PERMITS, UP.PERMITS],
@@ -266,7 +275,7 @@ function triggerUpcomingTransfer(e, sourceRowData) {
       sort: true, sortColumn: UP.DEADLINE, sortAscending: false
     }
   };
-  executeTransfer(e, config, sourceRowData);
+  executeTransfer(e, transferConfig, sourceRowData);
 }
 
 /**
@@ -274,15 +283,17 @@ function triggerUpcomingTransfer(e, sourceRowData) {
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
  * @param {any[]} sourceRowData The pre-read data from the edited row.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function triggerInventoryTransfer(e, sourceRowData) {
-  const FC = CONFIG.FORECASTING_COLS;
-  const INV = CONFIG.INVENTORY_COLS;
+function triggerInventoryTransfer(e, sourceRowData, config) {
+  const FC = config.FORECASTING_COLS;
+  const INV = config.INVENTORY_COLS;
 
-  const config = {
+  const transferConfig = {
     transferName: "Inventory Transfer (Delivered)",
-    destinationSheetName: CONFIG.SHEETS.INVENTORY,
+    destinationSheetName: config.SHEETS.INVENTORY,
+    lastEditTrackedSheets: config.LAST_EDIT.TRACKED_SHEETS,
     destinationColumnMapping: createMapping([
       [FC.PROJECT_NAME, INV.PROJECT_NAME], [FC.PROGRESS, INV.PROGRESS],
       [FC.EQUIPMENT, INV.EQUIPMENT], [FC.DETAILS, INV.DETAILS]
@@ -292,7 +303,7 @@ function triggerInventoryTransfer(e, sourceRowData) {
       projectNameSourceCol: FC.PROJECT_NAME, projectNameDestCol: INV.PROJECT_NAME
     }
   };
-  executeTransfer(e, config, sourceRowData);
+  executeTransfer(e, transferConfig, sourceRowData);
 }
 
 /**
@@ -300,15 +311,17 @@ function triggerInventoryTransfer(e, sourceRowData) {
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The onEdit event object.
  * @param {any[]} sourceRowData The pre-read data from the edited row.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function triggerFramingTransfer(e, sourceRowData) {
-  const FC = CONFIG.FORECASTING_COLS;
-  const FR = CONFIG.FRAMING_COLS;
+function triggerFramingTransfer(e, sourceRowData, config) {
+  const FC = config.FORECASTING_COLS;
+  const FR = config.FRAMING_COLS;
 
-  const config = {
+  const transferConfig = {
     transferName: "Framing Transfer (In Progress)",
-    destinationSheetName: CONFIG.SHEETS.FRAMING,
+    destinationSheetName: config.SHEETS.FRAMING,
+    lastEditTrackedSheets: config.LAST_EDIT.TRACKED_SHEETS,
     destinationColumnMapping: createMapping([
       [FC.SFID, FR.SFID], [FC.PROJECT_NAME, FR.PROJECT_NAME], [FC.EQUIPMENT, FR.EQUIPMENT],
       [FC.ARCHITECT, FR.ARCHITECT], [FC.DEADLINE, FR.DEADLINE]
@@ -321,5 +334,5 @@ function triggerFramingTransfer(e, sourceRowData) {
       keySeparator: "|"
     }
   };
-  executeTransfer(e, config, sourceRowData);
+  executeTransfer(e, transferConfig, sourceRowData);
 }

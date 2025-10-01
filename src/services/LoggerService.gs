@@ -13,11 +13,12 @@
  * @param {string} subjectDetails A brief description of the error context (e.g., "Dashboard Update Failed").
  * @param {Error} error The JavaScript Error object that was caught.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss] The spreadsheet where the error occurred. Defaults to the active spreadsheet if not provided.
+ * @param {object} config The global configuration object.
  */
-function notifyError(subjectDetails, error, ss) {
+function notifyError(subjectDetails, error, ss, config) {
   const props = PropertiesService.getScriptProperties();
-  const email = props.getProperty(CONFIG.LOGGING.ERROR_EMAIL_PROP);
-  const appName = CONFIG.APP_NAME;
+  const email = props.getProperty(config.LOGGING.ERROR_EMAIL_PROP);
+  const appName = config.APP_NAME;
 
   // Validate email format
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
@@ -80,11 +81,12 @@ function notifyError(subjectDetails, error, ss) {
  * If creation also fails (e.g., due to insufficient permissions), it defaults to using
  * the currently active spreadsheet as a last resort, ensuring that logging can always proceed.
  *
+ * @param {object} config The global configuration object.
  * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet} The log spreadsheet object.
  */
-function getOrCreateLogSpreadsheet() {
+function getOrCreateLogSpreadsheet(config) {
   const props = PropertiesService.getScriptProperties();
-  const storedId = props.getProperty(CONFIG.LOGGING.SPREADSHEET_ID_PROP);
+  const storedId = props.getProperty(config.LOGGING.SPREADSHEET_ID_PROP);
 
   // 1. Try opening the stored ID.
   if (storedId) {
@@ -98,8 +100,8 @@ function getOrCreateLogSpreadsheet() {
 
   // 2. Try creating a new external log spreadsheet (requires Drive/Sheets scopes).
   try {
-    const newSS = SpreadsheetApp.create(CONFIG.LOGGING.SPREADSHEET_NAME);
-    props.setProperty(CONFIG.LOGGING.SPREADSHEET_ID_PROP, newSS.getId());
+    const newSS = SpreadsheetApp.create(config.LOGGING.SPREADSHEET_NAME);
+    props.setProperty(config.LOGGING.SPREADSHEET_ID_PROP, newSS.getId());
     return newSS;
   } catch (e2) {
     // 3. Fallback: use the active workbook.
@@ -108,7 +110,7 @@ function getOrCreateLogSpreadsheet() {
       // Notify about the fallback, but don't let notification failure stop the process.
       // Use a property to prevent spamming notifications on every log attempt if fallback is active.
       if (!props.getProperty("FALLBACK_ACTIVE_NOTIFIED")) {
-         notifyError("Could not create external log workbook. Falling back to internal logging.", e2, active);
+         notifyError("Could not create external log workbook. Falling back to internal logging.", e2, active, config);
          props.setProperty("FALLBACK_ACTIVE_NOTIFIED", "true");
       }
     } catch (ignore) {}
@@ -158,10 +160,11 @@ function ensureMonthlyLogSheet(logSS, monthKey) {
  * @param {string} [entry.details] A description of what happened.
  * @param {string} [entry.result] The outcome of the action (e.g., "success", "skipped").
  * @param {string} [entry.errorMessage] Any error message if the action failed.
+ * @param {object} config The global configuration object.
  */
-function logAudit(sourceSS, entry) {
+function logAudit(sourceSS, entry, config) {
   try {
-    const logSS = getOrCreateLogSpreadsheet();
+    const logSS = getOrCreateLogSpreadsheet(config);
     const sheet = ensureMonthlyLogSheet(logSS);
     // Safely get the active user's email (requires authorization scope)
     const user = Session.getActiveUser() ? Session.getActiveUser().getEmail() : "unknown";
@@ -193,7 +196,7 @@ function logAudit(sourceSS, entry) {
   } catch (e) {
     Logger.log(`CRITICAL: Audit logging failure: ${e}`);
     // If the logging system itself fails, attempt to notify.
-    notifyError("Audit logging system failed critically", e, sourceSS);
+    notifyError("Audit logging system failed critically", e, sourceSS, config);
   }
 }
 
@@ -206,7 +209,7 @@ function logAudit(sourceSS, entry) {
  */
 function sortLogSheetsOnOpen() {
   try {
-    const logSS = getOrCreateLogSpreadsheet();
+    const logSS = getOrCreateLogSpreadsheet(CONFIG);
     if (!logSS) {
       Logger.log("Auto-Sort: Could not retrieve the log spreadsheet. Aborting sort.");
       return;
