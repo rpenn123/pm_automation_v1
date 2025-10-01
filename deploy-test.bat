@@ -3,8 +3,13 @@ echo =================================================
 echo  Deploying to TEST Environment
 echo =================================================
 echo.
-echo Running npm run deploy:test...
 call npm run deploy:test
+if %errorlevel% neq 0 (
+  echo.
+  echo ERROR: Deployment script failed.
+  pause
+  exit /b %errorlevel%
+)
 echo.
 echo =================================================
 echo  Deployment to TEST Complete
