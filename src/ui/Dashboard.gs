@@ -22,9 +22,10 @@ function updateDashboard() {
   const scriptStartTime = new Date();
   Logger.log('Dashboard update initiated at ' + scriptStartTime.toLocaleString());
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const config = CONFIG; // The only function that should access the global CONFIG.
 
   try {
-    const { FORECASTING, DASHBOARD, OVERDUE_DETAILS } = CONFIG.SHEETS;
+    const { FORECASTING, DASHBOARD, OVERDUE_DETAILS } = config.SHEETS;
 
     const forecastSheet = ss.getSheetByName(FORECASTING);
     if (!forecastSheet) throw new Error('Sheet "' + FORECASTING + '" not found.');
@@ -35,12 +36,12 @@ function updateDashboard() {
     const overdueSheetGid = overdueDetailsSheet.getSheetId();
 
     // 1) Read
-    const read = readForecastingData(forecastSheet);
+    const read = readForecastingData(forecastSheet, config);
     if (!read || !read.forecastingValues) throw new Error('Failed to read data from ' + FORECASTING + '.');
     const { forecastingValues, forecastingHeaders } = read;
 
     // 2) Process
-    const processed = processForecastingData(forecastingValues);
+    const processed = processForecastingData(forecastingValues, config);
     const { monthlySummaries, grandTotals, allOverdueItems, missingDeadlinesCount } = processed;
     Logger.log('Processing complete. Found ' + allOverdueItems.length + ' overdue items and ' + missingDeadlinesCount + ' rows with missing deadlines.');
 
@@ -48,11 +49,11 @@ function updateDashboard() {
     populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders);
 
     // 4) Dashboard table
-    clearAndResizeSheet(dashboardSheet, CONFIG.DASHBOARD_LAYOUT.FIXED_ROW_COUNT, CONFIG.DASHBOARD_LAYOUT.HIDE_COL_END);
-    setDashboardHeaders(dashboardSheet);
-    setDashboardHeaderNotes(dashboardSheet);
+    clearAndResizeSheet(dashboardSheet, config.DASHBOARD_LAYOUT.FIXED_ROW_COUNT, config.DASHBOARD_LAYOUT.HIDE_COL_END);
+    setDashboardHeaders(dashboardSheet, config);
+    setDashboardHeaderNotes(dashboardSheet, config);
 
-    const months = generateMonthList(CONFIG.DASHBOARD_DATES.START, CONFIG.DASHBOARD_DATES.END);
+    const months = generateMonthList(config.DASHBOARD_DATES.START, config.DASHBOARD_DATES.END);
     const dataStartRow = 2;
 
     // Align processed map to ordered month list
@@ -63,7 +64,7 @@ function updateDashboard() {
     });
 
     if (dashboardData.length > 0) {
-      const DL = CONFIG.DASHBOARD_LAYOUT;
+      const DL = config.DASHBOARD_LAYOUT;
       const numDataRows = dashboardData.length;
 
       // Batch write dashboard table
@@ -106,12 +107,12 @@ function updateDashboard() {
       missingCell.setFontWeight('bold');
 
       // 5) Format
-      applyDashboardFormatting(dashboardSheet, numDataRows);
+      applyDashboardFormatting(dashboardSheet, numDataRows, config);
 
       // 6) Charts
-      if (CONFIG.DASHBOARD_CHARTING.ENABLED) {
-        createOrUpdateDashboardCharts(dashboardSheet, months, dashboardData);
-        hideDataColumns(dashboardSheet);
+      if (config.DASHBOARD_CHARTING.ENABLED) {
+        createOrUpdateDashboardCharts(dashboardSheet, months, dashboardData, config);
+        hideDataColumns(dashboardSheet, config);
       }
     }
 
@@ -121,7 +122,7 @@ function updateDashboard() {
 
   } catch (error) {
     Logger.log('ERROR in updateDashboard: ' + error.message + '\nStack: ' + error.stack);
-    notifyError('Dashboard Update Failed', error, ss);
+    notifyError('Dashboard Update Failed', error, ss, config);
     ui.alert('An error occurred updating the dashboard. Please check logs and the notification email.\nError: ' + error.message);
   }
 }
@@ -133,14 +134,14 @@ function updateDashboard() {
 /**
  * Efficient read of the Forecasting sheet.
  */
-function readForecastingData(forecastSheet) {
+function readForecastingData(forecastSheet, config) {
   try {
     const dataRange = forecastSheet.getDataRange();
     const numRows = dataRange.getNumRows();
     const forecastingHeaders = numRows > 0 ? forecastSheet.getRange(1, 1, 1, dataRange.getNumColumns()).getValues()[0] : [];
     if (numRows <= 1) return { forecastingValues: [], forecastingHeaders: forecastingHeaders };
 
-    const colIndices = Object.values(CONFIG.FORECASTING_COLS);
+    const colIndices = Object.values(config.FORECASTING_COLS);
     const lastColNumNeeded = Math.max.apply(null, colIndices);
     const numColsToRead = Math.min(lastColNumNeeded, dataRange.getNumColumns());
 
@@ -158,7 +159,7 @@ function readForecastingData(forecastSheet) {
  * - monthlySummaries: Map key "YYYY-M" -> [total, upcoming, overdue, approved]
  * - grandTotals: [total, upcoming, overdue, approved]
  */
-function processForecastingData(forecastingValues) {
+function processForecastingData(forecastingValues, config) {
   const monthlySummaries = new Map();
   const allOverdueItems = [];
   // Standardized to [total, upcoming, overdue, approved] to match monthlySummaries
@@ -168,12 +169,12 @@ function processForecastingData(forecastingValues) {
   var today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const FC = CONFIG.FORECASTING_COLS;
+  const FC = config.FORECASTING_COLS;
   const deadlineIdx = FC.DEADLINE - 1;
   const progressIdx = FC.PROGRESS - 1;
   const permitsIdx  = FC.PERMITS - 1;
 
-  const S = CONFIG.STATUS_STRINGS;
+  const S = config.STATUS_STRINGS;
   const inProgressLower  = S.IN_PROGRESS.toLowerCase();
   const scheduledLower   = S.SCHEDULED.toLowerCase();
   const approvedLower    = S.PERMIT_APPROVED.toLowerCase();
@@ -274,9 +275,9 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
   }
 }
 
-function setDashboardHeaders(sheet) {
-  const DL = CONFIG.DASHBOARD_LAYOUT;
-  const DF = CONFIG.DASHBOARD_FORMATTING;
+function setDashboardHeaders(sheet, config) {
+  const DL = config.DASHBOARD_LAYOUT;
+  const DF = config.DASHBOARD_FORMATTING;
 
   const headers = [
     'Year', 'Month', 'Total Projects', 'Upcoming', 'Overdue', 'Approved',
@@ -299,8 +300,8 @@ function setDashboardHeaders(sheet) {
   }
 }
 
-function setDashboardHeaderNotes(sheet) {
-  const DL = CONFIG.DASHBOARD_LAYOUT;
+function setDashboardHeaderNotes(sheet, config) {
+  const DL = config.DASHBOARD_LAYOUT;
   sheet.getRange(1, DL.TOTAL_COL).setNote('Total projects with a deadline in this month.');
   sheet.getRange(1, DL.UPCOMING_COL).setNote('Projects "In Progress" or "Scheduled" with a deadline in the future.');
   sheet.getRange(1, DL.OVERDUE_COL).setNote('Projects "In Progress" with a deadline in the past. Click number to see details.');
@@ -308,9 +309,9 @@ function setDashboardHeaderNotes(sheet) {
   sheet.getRange(1, DL.GT_TOTAL_COL).setNote('Grand total of all projects with a valid deadline.');
 }
 
-function applyDashboardFormatting(sheet, numDataRows) {
-  const DL = CONFIG.DASHBOARD_LAYOUT;
-  const DF = CONFIG.DASHBOARD_FORMATTING;
+function applyDashboardFormatting(sheet, numDataRows, config) {
+  const DL = config.DASHBOARD_LAYOUT;
+  const DF = config.DASHBOARD_FORMATTING;
   const dataRange = sheet.getRange(2, DL.YEAR_COL, numDataRows, 6);
 
   dataRange.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY)
@@ -330,8 +331,8 @@ function applyDashboardFormatting(sheet, numDataRows) {
        .setBorder(true, true, true, true, true, true, DF.BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID_THIN);
 }
 
-function hideDataColumns(sheet) {
-  const DL = CONFIG.DASHBOARD_LAYOUT;
+function hideDataColumns(sheet, config) {
+  const DL = config.DASHBOARD_LAYOUT;
   if (sheet.getMaxColumns() < DL.HIDE_COL_START) {
     Logger.log('Skipping hideDataColumns: Sheet only has ' + sheet.getMaxColumns() + ' columns, less than required ' + DL.HIDE_COL_START + '.');
     return;
@@ -433,13 +434,13 @@ function setStoredCount(sheet, col, count) {
  * Two 4-col tables: Past and Upcoming.
  * Column order per table: [Month, Overdue, Upcoming, Total]
  */
-function createOrUpdateDashboardCharts(sheet, months, dashboardData) {
+function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
   // Remove existing charts first for idempotence
   sheet.getCharts().forEach(function(chart) { sheet.removeChart(chart); });
 
-  const DC = CONFIG.DASHBOARD_CHARTING;
-  const DL = CONFIG.DASHBOARD_LAYOUT;
-  const DF = CONFIG.DASHBOARD_FORMATTING;
+  const DC = config.DASHBOARD_CHARTING;
+  const DL = config.DASHBOARD_LAYOUT;
+  const DF = config.DASHBOARD_FORMATTING;
   const COLORS = DF.CHART_COLORS;
   const STACKED = typeof DC.STACKED === 'boolean' ? DC.STACKED : false;
   const MONTH_FMT = DF.MONTH_FORMAT || 'mmm yyyy';

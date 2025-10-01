@@ -73,17 +73,18 @@ function initializeLastEditFormulas_wrapper() {
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
+  const config = CONFIG; // Top-level entry point
 
   try {
     // 1. Install onEdit trigger
     installOnEditTrigger(ss);
 
     // 2. Create Last Edit columns
-    ensureAllLastEditColumns(ss);
+    ensureAllLastEditColumns(ss, config);
     Logger.log("Last Edit columns ensured.");
 
     // 3. Initialize external logging
-    const logSS = getOrCreateLogSpreadsheet();
+    const logSS = getOrCreateLogSpreadsheet(config);
     ensureMonthlyLogSheet(logSS);
     Logger.log("Logging initialized.");
 
@@ -91,7 +92,7 @@ function setup() {
 
   } catch (error) {
     Logger.log(`Setup failed: ${error}\n${error.stack}`);
-    notifyError("Project Setup Routine Failed", error, ss);
+    notifyError("Project Setup Routine Failed", error, ss, config);
     ui.alert("❌ Setup Failed", `An error occurred during setup. Please check the logs or the notification email.\nError: ${error.message}`, ui.ButtonSet.OK);
   }
 }
@@ -132,7 +133,8 @@ function installOnEditTrigger(ss) {
 function setErrorNotificationEmail_wrapper() {
   const ui = SpreadsheetApp.getUi();
   const props = PropertiesService.getScriptProperties();
-  const currentEmail = props.getProperty(CONFIG.LOGGING.ERROR_EMAIL_PROP) || "Not set";
+  const config = CONFIG; // Top-level entry point
+  const currentEmail = props.getProperty(config.LOGGING.ERROR_EMAIL_PROP) || "Not set";
 
   const response = ui.prompt(
     "Set Error Notification Email",
@@ -144,7 +146,7 @@ function setErrorNotificationEmail_wrapper() {
     const newEmail = response.getResponseText().trim();
     // Simple regex for email validation
     if (/^\S+@\S+\.\S+$/.test(newEmail)) {
-      props.setProperty(CONFIG.LOGGING.ERROR_EMAIL_PROP, newEmail);
+      props.setProperty(config.LOGGING.ERROR_EMAIL_PROP, newEmail);
       ui.alert("✅ Success", `Error notification email has been set to: ${newEmail}`, ui.ButtonSet.OK);
     } else {
       ui.alert("❌ Invalid Email", "The email address you entered is not valid. Please try again.", ui.ButtonSet.OK);

@@ -7,34 +7,36 @@
 
 /**
  * Ensures that all sheets designated for edit tracking have the necessary "Last Edit" columns.
- * It iterates through the sheet names listed in `CONFIG.LAST_EDIT.TRACKED_SHEETS`,
+ * It iterates through the sheet names listed in `config.LAST_EDIT.TRACKED_SHEETS`,
  * finds each corresponding sheet object, and calls `ensureLastEditColumns` on it.
  * This function is idempotent and safe to run multiple times.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet instance containing the sheets to process.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function ensureAllLastEditColumns(ss) {
-  const trackedSheets = CONFIG.LAST_EDIT.TRACKED_SHEETS;
+function ensureAllLastEditColumns(ss, config) {
+  const trackedSheets = config.LAST_EDIT.TRACKED_SHEETS;
   trackedSheets.forEach(name => {
     const sh = ss.getSheetByName(name);
     // Only proceed if the sheet actually exists in the workbook
-    if (sh) ensureLastEditColumns(sh);
+    if (sh) ensureLastEditColumns(sh, config);
   });
 }
 
 /**
  * Ensures a specific sheet has the "Last Edit" columns: a hidden timestamp and a visible relative time.
- * If the columns do not exist by their header names (defined in `CONFIG.LAST_EDIT`),
+ * If the columns do not exist by their header names (defined in `config.LAST_EDIT`),
  * this function creates them at the end of the sheet. The raw timestamp column is hidden
  * from users to reduce clutter.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to check and potentially modify.
+ * @param {object} config The global configuration object.
  * @returns {{tsCol: number, relCol: number}} An object containing the 1-based column indices
  *   for the timestamp (`tsCol`) and relative time (`relCol`) columns.
  */
-function ensureLastEditColumns(sheet) {
-  const { AT_HEADER, REL_HEADER } = CONFIG.LAST_EDIT;
+function ensureLastEditColumns(sheet, config) {
+  const { AT_HEADER, REL_HEADER } = config.LAST_EDIT;
   let startingLastCol = sheet.getLastColumn();
 
   // 1. Handle Timestamp (Hidden) Column
@@ -72,13 +74,14 @@ function ensureLastEditColumns(sheet) {
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet where the edit occurred.
  * @param {number} row The 1-based row number that was edited.
+ * @param {object} config The global configuration object.
  * @returns {void}
  */
-function updateLastEditForRow(sheet, row) {
+function updateLastEditForRow(sheet, row, config) {
   if (row <= 1) return; // Skip headers
   
   try {
-    const cols = ensureLastEditColumns(sheet);
+    const cols = ensureLastEditColumns(sheet, config);
     const tsCell = sheet.getRange(row, cols.tsCol);
     const relCell = sheet.getRange(row, cols.relCol);
 
@@ -94,7 +97,7 @@ function updateLastEditForRow(sheet, row) {
   } catch (error) {
     // Log and notify if this specific update fails, as it's a critical tracking feature
     Logger.log(`Failed to update Last Edit for ${sheet.getName()} Row ${row}: ${error}`);
-    notifyError(`Last Edit update failed on ${sheet.getName()}`, error, sheet.getParent());
+    notifyError(`Last Edit update failed on ${sheet.getName()}`, error, sheet.getParent(), config);
   }
 }
 
@@ -136,7 +139,8 @@ function _generateOptimizedRelativeTimeFormula(tsA1) {
  */
 function initializeLastEditFormulas() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const trackedSheets = CONFIG.LAST_EDIT.TRACKED_SHEETS;
+  const config = CONFIG; // Access global config here
+  const trackedSheets = config.LAST_EDIT.TRACKED_SHEETS;
 
   trackedSheets.forEach(name => {
     const sh = ss.getSheetByName(name);
@@ -144,7 +148,7 @@ function initializeLastEditFormulas() {
     const lastRow = sh.getLastRow();
     if (lastRow < 2) return;
 
-    const cols = ensureLastEditColumns(sh);
+    const cols = ensureLastEditColumns(sh, config);
     const relRange = sh.getRange(2, cols.relCol, lastRow - 1, 1);
 
     // Determine the column letter of the timestamp column (e.g., "Z")
