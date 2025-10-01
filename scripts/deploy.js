@@ -2,68 +2,78 @@
 const fs = require('fs-extra');
 const path = require('path');
 const { exec } = require('child_process');
+const util = require('util');
 
-function deploy() {
+const execPromise = util.promisify(exec);
+
+async function runCommand(command, logMessage) {
+  console.log(logMessage);
+  try {
+    const { stdout, stderr } = await execPromise(command);
+    if (stdout) console.log(stdout);
+    if (stderr) console.error(stderr);
+    console.log(`${logMessage} - Success`);
+  } catch (error) {
+    console.error(`Error during: "${logMessage}"`);
+    console.error(error.message);
+    throw new Error(`Failed to execute command: ${command}`);
+  }
+}
+
+async function checkUncommittedChanges() {
+  console.log('Checking for uncommitted changes...');
+  const { stdout } = await execPromise('git status --porcelain');
+  if (stdout) {
+    console.error('ERROR: You have uncommitted changes.');
+    console.error('Please commit or stash them before deploying.');
+    console.error(stdout);
+    throw new Error('Uncommitted changes found.');
+  }
+  console.log('No uncommitted changes found.');
+}
+
+async function deploy() {
   const env = process.argv[2];
   if (!['test', 'prod'].includes(env)) {
     console.error('Usage: node scripts/deploy.js [test|prod]');
     process.exit(1);
   }
 
-  console.log('Pulling latest changes from Git...');
-  const gitPull = exec('git pull');
-
-  gitPull.stdout.pipe(process.stdout);
-  gitPull.stderr.pipe(process.stderr);
-
-  gitPull.on('close', (code) => {
-    if (code !== 0) {
-      console.error(`\nError: git pull exited with code ${code}`);
-      process.exit(1);
-    }
-
-    console.log('\nGit pull successful. Starting deployment...');
-    runDeployment(env);
-  });
-}
-
-async function runDeployment(env) {
-  const rootDir = process.cwd();
-  const configDir = path.join(rootDir, 'config');
-  const claspConfigFile = `.clasp.${env}.json`;
-  const sourcePath = path.join(configDir, claspConfigFile);
-  const destPath = path.join(rootDir, '.clasp.json');
-
   try {
-    // 1. Check if the source config file exists
-    if (!await fs.pathExists(sourcePath)) {
-      console.error(`Error: Config file not found at ${sourcePath}`);
-      process.exit(1);
-    }
+    // Step 1: Pull latest changes from Git
+    await runCommand('git pull', 'Pulling latest changes from Git...');
 
-    // 2. Copy the correct config file to the root
+    // Step 2: Install/update dependencies
+    await runCommand('npm install', 'Installing dependencies...');
+
+    // Step 3: Check for uncommitted changes (post-pull and post-install)
+    await checkUncommittedChanges();
+
+    // Step 4: Validate clasp configuration
+    await runCommand('npm run validate-config', 'Validating clasp configuration...');
+
+    // Step 5: Copy the correct config file to the root
+    const rootDir = process.cwd();
+    const configDir = path.join(rootDir, 'config');
+    const claspConfigFile = `.clasp.${env}.json`;
+    const sourcePath = path.join(configDir, claspConfigFile);
+    const destPath = path.join(rootDir, '.clasp.json');
+
     console.log(`Copying ${sourcePath} to ${destPath}...`);
+    if (!await fs.pathExists(sourcePath)) {
+      throw new Error(`Config file not found at ${sourcePath}`);
+    }
     await fs.copy(sourcePath, destPath, { overwrite: true });
+    console.log('Config file copied successfully.');
 
-    // 3. Run clasp push
-    console.log(`Deploying to ${env.toUpperCase()} environment...`);
-    const claspCommand = 'npx clasp push -f'; // -f to force overwrite
-    const child = exec(claspCommand);
+    // Step 6: Run clasp push
+    await runCommand('npx clasp push -f', `Deploying to ${env.toUpperCase()} environment...`);
 
-    // 4. Stream output to console
-    child.stdout.pipe(process.stdout);
-    child.stderr.pipe(process.stderr);
+    console.log(`\nDeployment to ${env.toUpperCase()} completed successfully.`);
 
-    child.on('close', (code) => {
-      if (code === 0) {
-        console.log(`\nDeployment to ${env.toUpperCase()} completed successfully.`);
-      } else {
-        console.error(`\nError: clasp push exited with code ${code}`);
-        process.exit(1);
-      }
-    });
   } catch (error) {
-    console.error('An error occurred during deployment:', error);
+    console.error('\n--- DEPLOYMENT FAILED ---');
+    console.error(error.message);
     process.exit(1);
   }
 }
