@@ -331,3 +331,35 @@ function getMaxValueInObject(obj) {
 function uniqueArray(arr) {
   return [...new Set(arr)];
 }
+
+// =================================================================
+// ==================== LOCKING UTILITIES ==========================
+// =================================================================
+
+/**
+ * Attempts to acquire a script lock with a retry mechanism, making it more resilient
+ * to brief contention.
+ *
+ * @param {GoogleAppsScript.Lock.Lock} lock The LockService lock object to acquire.
+ * @param {number} [maxRetries=3] The maximum number of times to attempt acquiring the lock.
+ * @param {number} [delayMs=1000] The delay in milliseconds between retry attempts.
+ * @returns {boolean} `true` if the lock was acquired, `false` otherwise.
+ */
+function acquireLockWithRetry(lock, maxRetries, delayMs) {
+  const retries = maxRetries === undefined ? 3 : maxRetries;
+  const delay = delayMs === undefined ? 1000 : delayMs;
+
+  for (let i = 0; i < retries; i++) {
+    // Try to acquire the lock, waiting up to 100ms.
+    if (lock.tryLock(100)) {
+      return true;
+    }
+    // If this wasn't the last attempt, wait before retrying.
+    if (i < retries - 1) {
+      Utilities.sleep(delay);
+    }
+  }
+
+  // If the loop completes without acquiring the lock, return false.
+  return false;
+}
