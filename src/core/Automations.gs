@@ -154,9 +154,9 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config) {
   const logIdentifier = sfid ? `SFID ${sfid}` : `"${projectName}"`;
 
   try {
-    lockAcquired = lock.tryLock(2000);
+    lockAcquired = acquireLockWithRetry(lock);
     if (!lockAcquired) {
-      Logger.log(`${actionName}: Lock not acquired for ${logIdentifier}. Skipping.`);
+      Logger.log(`${actionName}: Lock not acquired for ${logIdentifier} after multiple retries. Skipping.`);
       logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" });
       return;
     }
@@ -208,9 +208,9 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config
   const logIdentifier = sfid ? `SFID ${sfid}` : `"${projectName}"`;
 
   try {
-    lockAcquired = lock.tryLock(2000);
+    lockAcquired = acquireLockWithRetry(lock);
     if (!lockAcquired) {
-      Logger.log(`${actionName}: Lock not acquired for ${logIdentifier}. Skipping.`);
+      Logger.log(`${actionName}: Lock not acquired for ${logIdentifier} after multiple retries. Skipping.`);
       logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" });
       return;
     }
