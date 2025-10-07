@@ -18,6 +18,46 @@
  *    - Initial refactoring (structure/performance) - Logic errors persisted.
  */
 
+// =================================================================
+// ==================== HELPER FUNCTIONS ===========================
+// =================================================================
+
+/**
+ * Normalizes a string for reliable comparison by trimming whitespace and converting to lowercase.
+ * @param {any} str The string to normalize.
+ * @return {string} The trimmed, lowercased string.
+ */
+function normalizeString(str) {
+  return String(str || '').trim().toLowerCase();
+}
+
+/**
+ * Parses a value into a Date object and normalizes it to midnight (00:00:00).
+ * This is crucial for accurate date-only comparisons.
+ * @param {any} dateValue The value to parse (can be a Date object, string, or number).
+ * @return {Date|null} A normalized Date object or null if the input is invalid.
+ */
+function parseAndNormalizeDate(dateValue) {
+  if (!dateValue) return null;
+
+  // Check if it's already a valid Date object
+  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
+    const normalized = new Date(dateValue.getTime());
+    normalized.setHours(0, 0, 0, 0);
+    return normalized;
+  }
+
+  // Attempt to parse if it's a string or number, which is common from spreadsheets
+  const parsedDate = new Date(dateValue);
+  if (isNaN(parsedDate.getTime())) {
+    return null; // Return null for invalid dates
+  }
+
+  parsedDate.setHours(0, 0, 0, 0);
+  return parsedDate;
+}
+
+
 /**
  * Main orchestrator to generate or update the Dashboard.
  */
@@ -50,7 +90,7 @@ function updateDashboard() {
     const months = generateMonthList(config.DASHBOARD_DATES.START, config.DASHBOARD_DATES.END);
     const dashboardData = months.map(function(month) {
       const key = month.getFullYear() + '-' + month.getMonth();
-      return monthlySummaries.get(key) || [0, 0, 0, 0];
+      return monthlySummaries.get(key) || [0, 0, 0, 0]; // [total, upcoming, overdue, approved]
     });
 
     // FINALIZED FIX: Grand Totals are calculated from the final filtered data to ensure consistency.
@@ -119,6 +159,9 @@ function processDashboardData(forecastingValues, config) {
   const progressIdx = FC.PROGRESS - 1;
   const permitsIdx = FC.PERMITS - 1;
 
+  // ASSUMPTION: Based on the problem description, defining what constitutes a "completed"
+  // or "approved" status is critical. These strings would typically live in the CONFIG object.
+  // Since the CONFIG is not provided, we define them here with clear assumptions.
   const S = config.STATUS_STRINGS;
   const approvedLower = normalizeString(S.PERMIT_APPROVED);
   const inProgressLower = normalizeString(S.IN_PROGRESS);
@@ -157,6 +200,8 @@ function processDashboardData(forecastingValues, config) {
       } else { // FIX: Overdue includes all active, past-due statuses
         monthData[2]++;
         allOverdueItems.push(row);
+      } else { // deadlineDate >= today
+        monthData[1]++; // Upcoming
       }
     }
 
