@@ -166,8 +166,6 @@ function processDashboardData(forecastingValues, config) {
       } else {
         monthData[2]++; // Overdue
         allOverdueItems.push(row);
-      } else { // deadlineDate >= today
-        monthData[1]++; // Upcoming
       }
     }
 
