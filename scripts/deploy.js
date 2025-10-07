@@ -56,11 +56,8 @@ function checkUncommittedChanges() {
 }
 
 function pullLatestChanges() {
-  // Bypassing git pull as it can cause issues in this environment.
-  // In a real-world scenario, you would want to run 'git pull' here.
-  console.log('\nSkipping git pull...');
-  installDependencies();
-  // runCommand('git pull', installDependencies);
+  console.log('\nPulling latest changes from git...');
+  runCommand('git pull', installDependencies);
 }
 
 function installDependencies() {
