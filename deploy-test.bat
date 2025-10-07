@@ -9,6 +9,7 @@ node scripts/deploy.js test
 if %errorlevel% neq 0 (
   echo.
   echo ERROR: Deployment to TEST failed.
+  pause
   exit /b 1
 )
 
