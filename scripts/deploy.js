@@ -30,12 +30,24 @@ function runCommand(command, onSuccess) {
 function checkUncommittedChanges() {
     console.log('Checking for uncommitted changes...');
     try {
-        const status = execSync('git status --porcelain').toString();
+        const status = execSync('git status --porcelain').toString().trim();
+
         if (status) {
-            console.error('Error: You have uncommitted changes. Please commit or stash them before deploying.');
-            process.exit(1);
+            // `git status --porcelain` outputs lines like ' M path/to/file.js'
+            // We split the line by spaces and take the last part to get the filename.
+            const changedFiles = status.split('\n').map(line => line.trim().split(' ').pop());
+
+            // Filter out package-lock.json to see if any *other* files were changed.
+            const otherChanges = changedFiles.filter(file => file !== 'package-lock.json');
+
+            if (otherChanges.length > 0) {
+                console.error('Error: You have uncommitted changes. Please commit or stash them before deploying.');
+                console.error('Uncommitted files:', otherChanges.join(', '));
+                process.exit(1);
+            }
         }
-        console.log('No uncommitted changes found.');
+
+        console.log('No uncommitted changes found (ignoring package-lock.json).');
         pullLatestChanges();
     } catch (error) {
         console.error('Error checking for uncommitted changes:', error);
