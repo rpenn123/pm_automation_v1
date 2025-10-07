@@ -9,6 +9,7 @@ node scripts/deploy.js prod
 if %errorlevel% neq 0 (
   echo.
   echo ERROR: Deployment to PRODUCTION failed.
+  pause
   exit /b 1
 )
 
