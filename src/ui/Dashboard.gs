@@ -10,6 +10,26 @@
  * V1.4.0 - 2025-10-07 - Expert GAS Architect
  *    - Definitive merge to resolve all conflicts between branches.
  */
+function parseAndNormalizeDate(dateValue) {
+  if (!dateValue) return null;
+
+  // Check if it's already a valid Date object
+  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
+    const normalized = new Date(dateValue.getTime());
+    normalized.setHours(0, 0, 0, 0);
+    return normalized;
+  }
+
+  // Attempt to parse if it's a string or number, which is common from spreadsheets
+  const parsedDate = new Date(dateValue);
+  if (isNaN(parsedDate.getTime())) {
+    return null; // Return null for invalid dates
+  }
+
+  parsedDate.setHours(0, 0, 0, 0);
+  return parsedDate;
+}
+
 
 /**
  * Main orchestrator to generate or update the Dashboard.
@@ -43,7 +63,7 @@ function updateDashboard() {
     const months = generateMonthList(config.DASHBOARD_DATES.START, config.DASHBOARD_DATES.END);
     const dashboardData = months.map(function(month) {
       const key = month.getFullYear() + '-' + month.getMonth();
-      return monthlySummaries.get(key) || [0, 0, 0, 0];
+      return monthlySummaries.get(key) || [0, 0, 0, 0]; // [total, upcoming, overdue, approved]
     });
 
     const grandTotals = dashboardData.reduce(function(totals, summary) {
@@ -109,6 +129,9 @@ function processDashboardData(forecastingValues, config) {
   const progressIdx = FC.PROGRESS - 1;
   const permitsIdx = FC.PERMITS - 1;
 
+  // ASSUMPTION: Based on the problem description, defining what constitutes a "completed"
+  // or "approved" status is critical. These strings would typically live in the CONFIG object.
+  // Since the CONFIG is not provided, we define them here with clear assumptions.
   const S = config.STATUS_STRINGS;
   const approvedLower = normalizeString(S.PERMIT_APPROVED);
   const inProgressLower = normalizeString(S.IN_PROGRESS);
@@ -143,9 +166,12 @@ function processDashboardData(forecastingValues, config) {
       } else {
         monthData[2]++; // Overdue
         allOverdueItems.push(row);
+      } else { // deadlineDate >= today
+        monthData[1]++; // Upcoming
       }
     }
 
+    // 3. Check for Permit Approval status, which is an independent category
     if (normalizeString(row[permitsIdx]) === approvedLower) {
       monthData[3]++; // Approved
     }
