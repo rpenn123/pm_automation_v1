@@ -68,20 +68,14 @@ function isTrueLike(val) {
  * @param {*} value The value to parse (can be a Date object, a date string, or a number).
  * @returns {Date|null} A new Date object set to midnight, or `null` if the value is not a valid date.
  */
-function parseAndNormalizeDate(value) {
-  if (value instanceof Date && !isNaN(value.getTime())) {
-    const d = new Date(value);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  if (value) {
-    const d = new Date(value);
-    if (!isNaN(d.getTime())) {
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-  }
-  return null;
+function parseAndNormalizeDate(input) {
+  if (!input) return null;
+  let date = (input instanceof Date) ? new Date(input.getTime()) : new Date(input);
+  // Check for validity
+  if (isNaN(date.getTime())) return null;
+  // Normalize: Set time to midnight
+  date.setHours(0, 0, 0, 0);
+  return date;
 }
 
 /**
