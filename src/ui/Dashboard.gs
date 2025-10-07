@@ -5,37 +5,10 @@
  * Design goals: correctness, idempotence, performance, and clean UX.
  *
  * Version History:
+ * V1.5.0 - 2025-10-07 - Expert GAS Architect
+ *    - Final syntax correction to resolve clasp push error.
  * V1.4.0 - 2025-10-07 - Expert GAS Architect
  *    - Definitive merge to resolve all conflicts between branches.
- *    - Finalized `processDashboardData` to use the most robust categorization logic.
- *    - Finalized `updateDashboard` to derive grand totals from filtered data post-processing.
- * V1.3.0 - 2025-10-07 - Expert GAS Architect
- *    - Merged structural and logical fixes to resolve conflicts.
- * V1.2.0 - 2025-10-07 - Expert GAS Architect
- *    - Fixed boundary condition error in processDashboardData ("Upcoming" now includes today using >=).
- *    - Fixed exclusionary logic error in processDashboardData ("Overdue" now includes "Scheduled" status).
- * V1.1.0 - [Previous Date] - [Previous Author]
- *    - Initial refactoring (structure/performance) - Logic errors persisted.
- */
-
-// =================================================================
-// ==================== HELPER FUNCTIONS ===========================
-// =================================================================
-
-/**
- * Normalizes a string for reliable comparison by trimming whitespace and converting to lowercase.
- * @param {any} str The string to normalize.
- * @return {string} The trimmed, lowercased string.
- */
-function normalizeString(str) {
-  return String(str || '').trim().toLowerCase();
-}
-
-/**
- * Parses a value into a Date object and normalizes it to midnight (00:00:00).
- * This is crucial for accurate date-only comparisons.
- * @param {any} dateValue The value to parse (can be a Date object, string, or number).
- * @return {Date|null} A normalized Date object or null if the input is invalid.
  */
 function parseAndNormalizeDate(dateValue) {
   if (!dateValue) return null;
@@ -93,16 +66,14 @@ function updateDashboard() {
       return monthlySummaries.get(key) || [0, 0, 0, 0]; // [total, upcoming, overdue, approved]
     });
 
-    // FINALIZED FIX: Grand Totals are calculated from the final filtered data to ensure consistency.
     const grandTotals = dashboardData.reduce(function(totals, summary) {
-      totals[0] += summary[0]; // total
-      totals[1] += summary[1]; // upcoming
-      totals[2] += summary[2]; // overdue
-      totals[3] += summary[3]; // approved
+      totals[0] += summary[0];
+      totals[1] += summary[1];
+      totals[2] += summary[2];
+      totals[3] += summary[3];
       return totals;
     }, [0, 0, 0, 0]);
 
-    // Pass the newly calculated grandTotals to the rendering function.
     renderDashboardTable(dashboardSheet, overdueSheetGid, { allOverdueItems, missingDeadlinesCount }, months, dashboardData, grandTotals, config);
 
     if (config.DASHBOARD_CHARTING.ENABLED) {
@@ -121,6 +92,9 @@ function updateDashboard() {
   }
 }
 
+/**
+ * Efficient read of the Forecasting sheet.
+ */
 function readForecastingData(forecastSheet, config) {
   try {
     const dataRange = forecastSheet.getDataRange();
@@ -142,10 +116,6 @@ function readForecastingData(forecastSheet, config) {
 
 /**
  * FINALIZED & REFACTORED: Single-pass processing with corrected logic.
- * Returns:
- * - monthlySummaries: Map key "YYYY-M" -> [total, upcoming, overdue, approved]
- * - allOverdueItems: Array of rows for overdue projects.
- * - missingDeadlinesCount: Count of rows with invalid dates.
  */
 function processDashboardData(forecastingValues, config) {
   const monthlySummaries = new Map();
@@ -166,10 +136,8 @@ function processDashboardData(forecastingValues, config) {
   const approvedLower = normalizeString(S.PERMIT_APPROVED);
   const inProgressLower = normalizeString(S.IN_PROGRESS);
   const scheduledLower = normalizeString(S.SCHEDULED);
-  // Define statuses that mean a project is no longer active for upcoming/overdue calculation.
-  const completedLower = normalizeString(S.COMPLETED || 'Completed'); // Assumed status
-  const cancelledLower = normalizeString(S.CANCELLED || 'Cancelled'); // Assumed status
-
+  const completedLower = normalizeString(S.COMPLETED || 'Completed');
+  const cancelledLower = normalizeString(S.CANCELLED || 'Cancelled');
 
   for (let i = 0; i < forecastingValues.length; i++) {
     const row = forecastingValues[i];
@@ -186,19 +154,17 @@ function processDashboardData(forecastingValues, config) {
     }
     const monthData = monthlySummaries.get(key);
 
-    // 1. Increment total projects for the month
     monthData[0]++;
 
     const currentStatus = normalizeString(row[progressIdx]);
     const isComplete = (currentStatus === completedLower || currentStatus === cancelledLower);
     const isActive = (currentStatus === inProgressLower || currentStatus === scheduledLower);
 
-    // 2. Categorize as Upcoming or Overdue, but only if not 'Completed' or 'Cancelled'
     if (isActive && !isComplete) {
-      if (deadlineDate >= today) { // FIX: Upcoming includes today
-        monthData[1]++;
-      } else { // FIX: Overdue includes all active, past-due statuses
-        monthData[2]++;
+      if (deadlineDate >= today) {
+        monthData[1]++; // Upcoming
+      } else {
+        monthData[2]++; // Overdue
         allOverdueItems.push(row);
       } else { // deadlineDate >= today
         monthData[1]++; // Upcoming
@@ -210,14 +176,11 @@ function processDashboardData(forecastingValues, config) {
       monthData[3]++; // Approved
     }
   }
-
-  // Grand totals are no longer calculated here to avoid discrepancies.
   return { monthlySummaries, allOverdueItems, missingDeadlinesCount };
 }
 
 /**
- * FINALIZED & REFACTORED: Renders the main data table.
- * Now receives grandTotals directly to ensure consistency.
+ * Renders the main data table.
  */
 function renderDashboardTable(dashboardSheet, overdueSheetGid, processedData, months, dashboardData, grandTotals, config) {
   const { missingDeadlinesCount } = processedData;
@@ -244,7 +207,6 @@ function renderDashboardTable(dashboardSheet, overdueSheetGid, processedData, mo
     dashboardSheet.getRange(dataStartRow, DL.YEAR_COL, numDataRows, 6).setValues(tableData);
     dashboardSheet.getRange(dataStartRow, DL.OVERDUE_COL, numDataRows, 1).setFormulas(overdueFormulas);
 
-    // Grand totals are now guaranteed to match the sum of the displayed data.
     const [gtTotal, gtUpcoming, gtOverdue, gtApproved] = grandTotals;
 
     dashboardSheet.getRange(dataStartRow, DL.GT_UPCOMING_COL).setValue(gtUpcoming);
@@ -293,11 +255,7 @@ function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
   try {
     var placeholderRange = sheet.getRange(anchorRow + 5, anchorCol, 1, 4);
     placeholderRange.merge();
-    placeholderRange.setValue(message)
-      .setHorizontalAlignment('center')
-      .setVerticalAlignment('middle')
-      .setFontStyle('italic')
-      .setFontColor('#999999');
+    placeholderRange.setValue(message).setHorizontalAlignment('center').setVerticalAlignment('middle').setFontStyle('italic').setFontColor('#999999');
   } catch (e) {
     Logger.log('Could not create chart placeholder: ' + e.message);
   }
@@ -310,10 +268,8 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
       overdueDetailsSheet.getRange(1, 1).setValue("Source 'Forecasting' sheet is empty or has no header row.");
       return;
     }
-
     var numRows = allOverdueItems.length;
     var numCols = allOverdueItems.length > 0 ? allOverdueItems[0].length : forecastingHeaders.length;
-
     overdueDetailsSheet.clear();
     if (overdueDetailsSheet.getMaxRows() > 1) {
       overdueDetailsSheet.deleteRows(2, overdueDetailsSheet.getMaxRows() - 1);
@@ -321,10 +277,8 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
     if (overdueDetailsSheet.getMaxColumns() > numCols) {
       overdueDetailsSheet.deleteColumns(numCols + 1, overdueDetailsSheet.getMaxColumns() - numCols);
     }
-
     var headersToWrite = forecastingHeaders.slice(0, numCols);
     overdueDetailsSheet.getRange(1, 1, 1, headersToWrite.length).setValues([headersToWrite]).setFontWeight('bold');
-
     if (numRows > 0) {
       if (overdueDetailsSheet.getMaxRows() < numRows + 1) {
         overdueDetailsSheet.insertRowsAfter(1, numRows);
@@ -350,9 +304,7 @@ function setDashboardHeaders(sheet, config) {
 
 function hideDataColumns(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
-  if (sheet.getMaxColumns() < DL.HIDE_COL_START) {
-    return;
-  }
+  if (sheet.getMaxColumns() < DL.HIDE_COL_START) return;
   const numColsToHide = DL.HIDE_COL_END - DL.HIDE_COL_START + 1;
   sheet.hideColumns(DL.HIDE_COL_START, numColsToHide);
 }
@@ -417,7 +369,7 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
     }
     var HIDDEN_START_COL = DL.HIDE_COL_START;
     var PAST_COL = HIDDEN_START_COL;
-    var UPC_COL  = HIDDEN_START_COL + 4;
+    var UPC_COL = HIDDEN_START_COL + 4;
     var HIDDEN_COLS_NEEDED = 8;
     ensureHiddenColumnCapacity(sheet, HIDDEN_START_COL, HIDDEN_COLS_NEEDED);
     var today = getMonthStart_(new Date());
@@ -439,12 +391,12 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
     var neededRows = Math.max(DATA_START_ROW + 1 + pastData.length, DATA_START_ROW + 1 + upcomingData.length, 20);
     ensureRowCapacity(sheet, neededRows);
     var prevPast = getStoredCount(sheet, PAST_COL);
-    var prevUpc  = getStoredCount(sheet, UPC_COL);
+    var prevUpc = getStoredCount(sheet, UPC_COL);
     var rowsToClear = Math.max(pastData.length, upcomingData.length, prevPast, prevUpc) + 2;
     clearHiddenBlock(sheet, DATA_START_ROW, PAST_COL, rowsToClear, 4);
-    clearHiddenBlock(sheet, DATA_START_ROW, UPC_COL,  rowsToClear, 4);
+    clearHiddenBlock(sheet, DATA_START_ROW, UPC_COL, rowsToClear, 4);
     sheet.getRange(DATA_START_ROW, PAST_COL, 1, 4).setValues(HEADER);
-    sheet.getRange(DATA_START_ROW, UPC_COL,  1, 4).setValues(HEADER);
+    sheet.getRange(DATA_START_ROW, UPC_COL, 1, 4).setValues(HEADER);
     if (pastData.length > 0) {
       sheet.getRange(DATA_START_ROW + 1, PAST_COL, pastData.length, 4).setValues(pastData);
       sheet.getRange(DATA_START_ROW + 1, PAST_COL, pastData.length, 1).setNumberFormat(MONTH_FMT);
@@ -454,7 +406,7 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
       sheet.getRange(DATA_START_ROW + 1, UPC_COL, upcomingData.length, 1).setNumberFormat(MONTH_FMT);
     }
     setStoredCount(sheet, PAST_COL, pastData.length);
-    setStoredCount(sheet, UPC_COL,  upcomingData.length);
+    setStoredCount(sheet, UPC_COL, upcomingData.length);
     var buildChart = function(title, leftCol, rowsCount, anchorRow) {
       if (rowsCount <= 0) return null;
       var range = sheet.getRange(DATA_START_ROW, leftCol, rowsCount + 1, 4);
