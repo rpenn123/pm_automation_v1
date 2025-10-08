@@ -85,6 +85,7 @@ const existingTestGs = fs.readFileSync('tests/test_Utilities.gs', 'utf8');
 const chartTitleTestGs = fs.readFileSync('tests/chart_title.test.gs', 'utf8');
 const overdueTestGs = fs.readFileSync('tests/bugfix-overdue-test.gs', 'utf8');
 const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
+const dataLossTestGs = fs.readFileSync('tests/test_data_loss.gs', 'utf8');
 
 
 // Make CONFIG global for tests
@@ -99,6 +100,7 @@ eval(existingTestGs);
 eval(chartTitleTestGs);
 eval(overdueTestGs);
 eval(dashboardTestGs);
+eval(dataLossTestGs);
 
 
 // =================================================================
@@ -107,7 +109,9 @@ eval(dashboardTestGs);
 
 // Run the tests
 try {
-    console.log("--- Running new bugfix test ---");
+    console.log("--- Running data loss test ---");
+    runDataLossTest();
+    console.log("\n--- Running new bugfix test ---");
     runRobustFindTest();
     console.log("\n--- Running existing utility tests ---");
     runUtilityTests();

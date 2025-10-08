@@ -36,7 +36,7 @@ function onEdit(e) {
   const config = CONFIG;
 
   // 1. Batch-read the entire edited row once for performance.
-  const sourceRowData = sheet.getRange(editedRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const sourceRowData = sheet.getRange(editedRow, 1, 1, sheet.getMaxColumns()).getValues()[0];
 
   // 2. Always update Last Edit tracking if applicable. This runs independently of other rules.
   if (config.LAST_EDIT.TRACKED_SHEETS.includes(sheetName)) {
