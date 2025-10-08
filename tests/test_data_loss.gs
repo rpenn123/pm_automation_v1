@@ -28,18 +28,35 @@ function runDataLossTest() {
         "2025-12-31"
     ];
 
+    const mockSpreadsheet = {
+        getSheetByName: (name) => mockSheet,
+        getName: () => 'Test Spreadsheet',
+        getId: () => 'test-ss-id',
+        getUrl: () => 'http://example.com/ss'
+    };
+
     const mockSheet = {
         getName: () => "Forecasting",
         // This is the source of the bug. It returns the last column with content.
         getLastColumn: () => 7,
         // This is the correct method to use. It returns the total number of columns.
         getMaxColumns: () => 10,
+        // Add mock for getLastRow to prevent `findRowByValue` from crashing
+        getLastRow: () => 2,
         getRange: (row, col, numRows, numCols) => ({
             getValues: () => [MOCK_SHEET_DATA.slice(0, numCols)],
             getSheet: () => mockSheet,
             getRow: () => 2,
             getColumn: () => 7,
+            setValue: () => {},
+            setFormula: () => {},
+            getA1Notation: () => 'A1',
+            getValue: () => 'some old value' // Add mock to prevent crash in sync function
         }),
+        // Add mocks to allow LastEditService to run without crashing
+        insertColumnAfter: () => {},
+        hideColumns: () => {},
+        getParent: () => mockSpreadsheet,
     };
 
     const mockEvent = {
@@ -52,16 +69,10 @@ function runDataLossTest() {
         },
         value: "In Progress",
         oldValue: "Some Progress",
-        source: {
-            getSheetByName: (name) => mockSheet,
-        },
+        source: mockSpreadsheet,
     };
 
-    // 2. Load the Automations.gs file content and evaluate it to make onEdit available.
-    const automationsCode = fs.readFileSync('src/core/Automations.gs', 'utf8');
-    eval(automationsCode);
-
-    // 3. Call the onEdit function to trigger the automation.
+    // 2. Call the onEdit function (already loaded globally) to trigger the automation.
     onEdit(mockEvent);
 
     // 4. Assert the result. This test should FAIL before the fix is applied.

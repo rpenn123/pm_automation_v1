@@ -41,6 +41,19 @@ function onEdit(e) {
   // 2. Always update Last Edit tracking if applicable. This runs independently of other rules.
   if (config.LAST_EDIT.TRACKED_SHEETS.includes(sheetName)) {
     updateLastEditForRow(sheet, editedRow, config);
+    // Also log this edit to the audit trail for accountability.
+    try {
+      const a1Notation = e.range.getA1Notation ? e.range.getA1Notation() : 'unknown';
+      logAudit(e.source, {
+        action: 'Row Edit',
+        sourceSheet: sheetName,
+        sourceRow: editedRow,
+        details: `Cell ${a1Notation} updated. New value: "${e.value}"`,
+        result: 'success'
+      }, config);
+    } catch (logError) {
+      Logger.log(`Failed to write audit log for edit on ${sheetName} R${editedRow}: ${logError}`);
+    }
   }
 
   // 3. Route the edit event to the appropriate handler based on a set of rules.
@@ -65,7 +78,7 @@ function onEdit(e) {
           rule.handler(e, sourceRowData, config);
         } catch (error) {
           Logger.log(`Handler error for ${rule.sheet} Col ${rule.col}: ${error}\n${error.stack}`);
-          notifyError(`Handler failed for ${rule.sheet} Col ${rule.col}`, error, e.source);
+          notifyError(`Handler failed for ${rule.sheet} Col ${rule.col}`, error, e.source, config);
           logAudit(e.source, {
             action: "HandlerError",
             sourceSheet: sheetName,
@@ -180,7 +193,7 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config) {
     }
   } catch (error) {
     Logger.log(`${actionName} error for ${logIdentifier}: ${error}\n${error.stack}`);
-    notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss);
+    notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss, config);
     logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) });
   } finally {
     if (lockAcquired) lock.releaseLock();
@@ -234,7 +247,7 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config
     }
   } catch (error) {
     Logger.log(`${actionName} error for ${logIdentifier}: ${error}\n${error.stack}`);
-    notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss);
+    notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss, config);
     logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) });
   } finally {
     if (lockAcquired) lock.releaseLock();

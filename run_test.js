@@ -9,9 +9,30 @@ global.Logger = {
     log: (message) => console.log(`[Logger] ${message}`)
 };
 
+global.PropertiesService = {
+    getScriptProperties: () => ({
+        getProperty: () => null,
+        setProperty: () => {},
+    })
+};
+
+global.MailApp = {
+    sendEmail: (options) => {
+        console.log(`[MailApp] Email sent: ${JSON.stringify(options)}`);
+    }
+};
+
 global.SpreadsheetApp = {
     getActiveSpreadsheet: () => ({
-        // Mock any methods on the Spreadsheet object if needed
+        // This is a simplified mock. Tests that need more specific behavior
+        // will define their own mocks.
+        getSheetByName: () => ({
+            getRange: () => ({
+                getValues: () => [[]],
+                getValue: () => '',
+            }),
+            getMaxColumns: () => 10,
+        })
     })
 };
 
@@ -25,7 +46,6 @@ global.notifyError = (subject, error, ss) => {
     throw new Error(errorMessage);
 };
 
-// This mock is needed by the code under test in Utilities.gs
 global.Utilities = {
   formatDate: (date, timeZone, format) => {
     if (!date || !(date instanceof Date)) return "";
@@ -45,32 +65,19 @@ global.Utilities = {
   sleep: (ms) => { /* no-op for tests */ }
 };
 
-// This mock is also needed by Utilities.gs
 global.Session = {
   getScriptTimeZone: () => "America/New_York",
+  getActiveUser: () => ({
+      getEmail: () => 'test.user@example.com'
+  })
 };
 
-
-// Mock Range object for TextFinder simulation (not needed for the fix, but for testing the old code)
-global.MockRange = class {
-    constructor(data, startRow) {
-        this.data = data;
-        this.startRow = startRow;
-    }
-    getValues() {
-        return this.data;
-    }
-    // This method is called by the old buggy code.
-    createTextFinder(text) {
-        // This functionality is not needed for the fixed code, so we can return a dummy object.
-        return {
-            matchCase: () => this,
-            matchEntireCell: () => this,
-            findNext: () => null
-        };
-    }
+global.LockService = {
+    getScriptLock: () => ({
+        tryLock: () => true,
+        releaseLock: () => {},
+    }),
 };
-
 
 // =================================================================
 // ======================= SCRIPT LOADER ===========================
@@ -80,28 +87,42 @@ global.MockRange = class {
 const utilitiesGs = fs.readFileSync('src/core/Utilities.gs', 'utf8');
 let configGs = fs.readFileSync('src/Config.gs', 'utf8');
 const dashboardGs = fs.readFileSync('src/ui/Dashboard.gs', 'utf8');
+const lastEditServiceGs = fs.readFileSync('src/services/LastEditService.gs', 'utf8');
+let loggerServiceGs = fs.readFileSync('src/services/LoggerService.gs', 'utf8');
+const automationsGs = fs.readFileSync('src/core/Automations.gs', 'utf8');
+let transferEngineGs = fs.readFileSync('src/core/TransferEngine.gs', 'utf8');
+
+// Load test files
 const testGs = fs.readFileSync('tests/bugfix-robust-find-test.gs', 'utf8');
 const existingTestGs = fs.readFileSync('tests/test_Utilities.gs', 'utf8');
 const chartTitleTestGs = fs.readFileSync('tests/chart_title.test.gs', 'utf8');
 const overdueTestGs = fs.readFileSync('tests/bugfix-overdue-test.gs', 'utf8');
 const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
 const dataLossTestGs = fs.readFileSync('tests/test_data_loss.gs', 'utf8');
-
+const auditTestGs = fs.readFileSync('tests/test_AuditLogging.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
+// Make logAudit global for spying
+loggerServiceGs = loggerServiceGs.replace('function logAudit(', 'global.logAudit = function logAudit(');
 
 // Use 'eval' to make the functions available in the current scope.
 eval(utilitiesGs);
 eval(configGs);
 eval(dashboardGs);
+eval(lastEditServiceGs);
+eval(loggerServiceGs);
+eval(automationsGs);
+transferEngineGs = transferEngineGs.replace('function executeTransfer(', 'global.executeTransfer = function executeTransfer(');
+eval(transferEngineGs); // TransferEngine is needed by Automations
+
 eval(testGs);
 eval(existingTestGs);
 eval(chartTitleTestGs);
 eval(overdueTestGs);
 eval(dashboardTestGs);
 eval(dataLossTestGs);
-
+eval(auditTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -121,6 +142,8 @@ try {
     runOverdueBugFixTests();
     console.log("\n--- Running dashboard tests ---");
     test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue();
+    console.log("\n--- Running audit logging tests ---");
+    runAuditLoggingTests();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);
