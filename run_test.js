@@ -100,6 +100,7 @@ const overdueTestGs = fs.readFileSync('tests/bugfix-overdue-test.gs', 'utf8');
 const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
 const dataLossTestGs = fs.readFileSync('tests/test_data_loss.gs', 'utf8');
 const auditTestGs = fs.readFileSync('tests/test_AuditLogging.gs', 'utf8');
+const transferEngineTestGs = fs.readFileSync('tests/core/TransferEngine.test.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
@@ -123,6 +124,7 @@ eval(overdueTestGs);
 eval(dashboardTestGs);
 eval(dataLossTestGs);
 eval(auditTestGs);
+eval(transferEngineTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -144,6 +146,8 @@ try {
     test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue();
     console.log("\n--- Running audit logging tests ---");
     runAuditLoggingTests();
+    console.log("\n--- Running TransferEngine tests ---");
+    runTransferEngineTests();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);
