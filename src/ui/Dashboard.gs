@@ -499,13 +499,13 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
         .setPosition(anchorRow, DL.CHART_ANCHOR_COL, 0, 0).build();
     };
     if (pastData.length > 0) {
-      var c1 = buildChart('Past ' + pastData.length + ' Months: Overdue, Upcoming, Total', PAST_COL, pastData.length, DL.CHART_START_ROW);
+      var c1 = buildChart('Past ' + DC.PAST_MONTHS_COUNT + ' Months: Overdue, Upcoming, Total', PAST_COL, pastData.length, DL.CHART_START_ROW);
       if (c1) sheet.insertChart(c1);
     } else {
       displayChartPlaceholder(sheet, DL.CHART_START_ROW, DL.CHART_ANCHOR_COL, 'No project data found for the past ' + DC.PAST_MONTHS_COUNT + ' months.');
     }
     if (upcomingData.length > 0) {
-      var c2 = buildChart('Next ' + upcomingData.length + ' Months: Overdue, Upcoming, Total', UPC_COL, upcomingData.length, DL.CHART_START_ROW + DC.ROW_SPACING);
+      var c2 = buildChart('Next ' + DC.UPCOMING_MONTHS_COUNT + ' Months: Overdue, Upcoming, Total', UPC_COL, upcomingData.length, DL.CHART_START_ROW + DC.ROW_SPACING);
       if (c2) sheet.insertChart(c2);
     } else {
       displayChartPlaceholder(sheet, DL.CHART_START_ROW + DC.ROW_SPACING, DL.CHART_ANCHOR_COL, 'No project data found for the next ' + DC.UPCOMING_MONTHS_COUNT + ' months.');
