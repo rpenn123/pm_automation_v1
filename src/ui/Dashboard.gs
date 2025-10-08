@@ -120,18 +120,10 @@ function processDashboardData(forecastingValues, config) {
   const inProgressLower = normalizeString(S.IN_PROGRESS);
   const scheduledLower = normalizeString(S.SCHEDULED);
 
-  // New statuses to exclude from overdue calculation, normalized for comparison.
-  const excludedStatuses = new Set([
-      "done", "canceled", "on hold", "stuck",
-      normalizeString(S.COMPLETED),
-      normalizeString(S.CANCELLED)
-  ]);
-
   for (let i = 0; i < forecastingValues.length; i++) {
     const row = forecastingValues[i];
     const rawDeadline = row[deadlineIdx];
 
-    // Use a robust date parsing utility that handles various formats and timezones.
     const deadlineDate = parseAndNormalizeDate(rawDeadline);
 
     if (!deadlineDate) {
@@ -145,23 +137,23 @@ function processDashboardData(forecastingValues, config) {
       monthlySummaries.set(key, [0, 0, 0, 0, []]);
     }
     const monthData = monthlySummaries.get(key);
-    monthData[0]++; // Increment total project count for the month.
+    monthData[0]++;
 
     const currentStatus = normalizeString(row[progressIdx]);
     const normalizedDeadline = new Date(Utilities.formatDate(deadlineDate, tz, "yyyy-MM-dd'T'00:00:00'Z'"));
 
-    // Overdue if deadline is today or in the past, AND status is not excluded.
-    if (normalizedDeadline <= today && !excludedStatuses.has(currentStatus)) {
+    // Overdue if deadline is today or earlier AND status is 'In Progress'.
+    if (normalizedDeadline <= today && currentStatus === inProgressLower) {
         monthData[2]++; // Overdue
         const overdueItem = {
             name: row[projectNameIdx] || 'Unnamed Project',
             deadline: Utilities.formatDate(deadlineDate, Session.getScriptTimeZone(), 'MMM d, yyyy')
         };
-        monthData[4].push(overdueItem); // Add details for hover note.
-        allOverdueItems.push(row); // Keep full row for grand total.
+        monthData[4].push(overdueItem);
+        allOverdueItems.push(row);
     }
-    // Upcoming if it's an active project and not overdue.
-    else if (currentStatus === inProgressLower || currentStatus === scheduledLower) {
+    // Upcoming if deadline is today or later AND status is active ('In Progress' or 'Scheduled').
+    else if (normalizedDeadline >= today && (currentStatus === inProgressLower || currentStatus === scheduledLower)) {
         monthData[1]++; // Upcoming
     }
 
@@ -250,9 +242,9 @@ function renderDashboardTable(dashboardSheet, processedData, months, dashboardDa
  */
 function setDashboardHeaderNotes(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
-  sheet.getRange(1, DL.TOTAL_COL).setNote('Total projects with a deadline in this month.');
+  sheet.getRange(1, DL.TOTAL_COL).setNote('Total projects with a valid deadline in this month.');
   sheet.getRange(1, DL.UPCOMING_COL).setNote('Active projects ("In Progress" or "Scheduled") with a deadline on or after today.');
-  sheet.getRange(1, DL.OVERDUE_COL).setNote('Active projects ("In Progress" or "Scheduled") with a deadline in the past. Click to see details.');
+  sheet.getRange(1, DL.OVERDUE_COL).setNote('Projects with status "In Progress" and a deadline in the past. Click to see details.');
   sheet.getRange(1, DL.APPROVED_COL).setNote("Projects with 'Permits' status set to 'approved'.");
   sheet.getRange(1, DL.GT_TOTAL_COL).setNote('Grand total for all projects shown in the table.');
 }
