@@ -79,9 +79,17 @@ function parseAndNormalizeDate(input) {
     return date;
   }
 
-  // 2. If it's a string, attempt to parse common formats.
+  // 2. If it's a string, attempt to parse common formats, but avoid purely numeric strings.
   if (typeof input === 'string') {
     const trimmedInput = input.trim();
+
+    // **Bug Fix**: If the string consists only of digits, do not treat it as a date.
+    // This prevents numeric project names (e.g., "12345") from being parsed as a
+    // millisecond timestamp, which would result in a date in 1970.
+    if (/^\d+$/.test(trimmedInput)) {
+        return null;
+    }
+
     let date;
 
     // Try to parse YYYY-MM-DD or YYYY/MM/DD format (handles ISO-like dates)
@@ -93,7 +101,6 @@ function parseAndNormalizeDate(input) {
       date = new Date(year, month - 1, day);
     } else {
       // Fallback for other formats recognized by the native parser, like MM/DD/YYYY.
-      // This is less reliable but provides a fallback.
       date = new Date(trimmedInput);
     }
 
@@ -103,13 +110,11 @@ function parseAndNormalizeDate(input) {
     }
   }
 
-  // 3. If it's a number (potentially from a spreadsheet), let the constructor handle it.
+  // 3. **Bug Fix**: Do not attempt to parse raw numbers as dates. A project name might be a number,
+  // and it should be treated as an identifier, not a date. If a date is intended, the sheet
+  // should provide a Date object, which is handled by the first check in this function.
   if (typeof input === 'number') {
-      const date = new Date(input);
-      if (date && !isNaN(date.getTime())) {
-          date.setHours(0, 0, 0, 0);
-          return date;
-      }
+    return null;
   }
 
   // 4. If all parsing attempts fail, return null.
