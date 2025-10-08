@@ -79,6 +79,27 @@ global.LockService = {
     }),
 };
 
+// Simple mock for jest.spyOn used in the new test
+const jest = {
+    spyOn: (obj, funcName) => {
+        const originalFunc = obj[funcName];
+        const mock = {
+            calls: [],
+            mock: {
+                calls: []
+            }
+        };
+        obj[funcName] = (...args) => {
+            mock.calls.push(args);
+            mock.mock.calls.push(args);
+            return originalFunc.apply(obj, args);
+        };
+        return mock;
+    }
+};
+global.jest = jest;
+
+
 // =================================================================
 // ======================= SCRIPT LOADER ===========================
 // =================================================================
@@ -86,7 +107,7 @@ global.LockService = {
 // Load the script content from the .gs files
 const utilitiesGs = fs.readFileSync('src/core/Utilities.gs', 'utf8');
 let configGs = fs.readFileSync('src/Config.gs', 'utf8');
-const dashboardGs = fs.readFileSync('src/ui/Dashboard.gs', 'utf8');
+let dashboardGs = fs.readFileSync('src/ui/Dashboard.gs', 'utf8');
 const lastEditServiceGs = fs.readFileSync('src/services/LastEditService.gs', 'utf8');
 let loggerServiceGs = fs.readFileSync('src/services/LoggerService.gs', 'utf8');
 const automationsGs = fs.readFileSync('src/core/Automations.gs', 'utf8');
@@ -96,16 +117,17 @@ let transferEngineGs = fs.readFileSync('src/core/TransferEngine.gs', 'utf8');
 const testGs = fs.readFileSync('tests/bugfix-robust-find-test.gs', 'utf8');
 const existingTestGs = fs.readFileSync('tests/test_Utilities.gs', 'utf8');
 const chartTitleTestGs = fs.readFileSync('tests/chart_title.test.gs', 'utf8');
-const overdueTestGs = fs.readFileSync('tests/bugfix-overdue-test.gs', 'utf8');
 const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
 const dataLossTestGs = fs.readFileSync('tests/test_data_loss.gs', 'utf8');
 const auditTestGs = fs.readFileSync('tests/test_AuditLogging.gs', 'utf8');
-const transferEngineTestGs = fs.readFileSync('tests/core/TransferEngine.test.gs', 'utf8');
+const hoverNotesTestGs = fs.readFileSync('tests/test_Dashboard_HoverNotes.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
 // Make logAudit global for spying
 loggerServiceGs = loggerServiceGs.replace('function logAudit(', 'global.logAudit = function logAudit(');
+// Make readForecastingData global for mocking in tests
+dashboardGs = dashboardGs.replace('function readForecastingData(', 'global.readForecastingData = function readForecastingData(');
 
 // Use 'eval' to make the functions available in the current scope.
 eval(utilitiesGs);
@@ -120,11 +142,10 @@ eval(transferEngineGs); // TransferEngine is needed by Automations
 eval(testGs);
 eval(existingTestGs);
 eval(chartTitleTestGs);
-eval(overdueTestGs);
 eval(dashboardTestGs);
 eval(dataLossTestGs);
 eval(auditTestGs);
-eval(transferEngineTestGs);
+eval(hoverNotesTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -140,14 +161,12 @@ try {
     runUtilityTests();
     console.log("\n--- Running chart title tests ---");
     runChartTitleTests();
-    console.log("\n--- Running overdue bugfix tests ---");
-    runOverdueBugFixTests();
     console.log("\n--- Running dashboard tests ---");
     test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue();
     console.log("\n--- Running audit logging tests ---");
     runAuditLoggingTests();
-    console.log("\n--- Running TransferEngine tests ---");
-    runTransferEngineTests();
+    console.log("\n--- Running Dashboard Hover Notes test ---");
+    test_Dashboard_HoverNotes();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);

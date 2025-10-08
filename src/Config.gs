@@ -24,8 +24,7 @@ const CONFIG = {
     UPCOMING: "Upcoming",
     INVENTORY: "Inventory_Elevators",
     FRAMING: "Framing",
-    DASHBOARD: "Dashboard",
-    OVERDUE_DETAILS: "Overdue Details"
+    DASHBOARD: "Dashboard"
   },
 
   // --- Status Strings (used in both Automations and Dashboard) ---
@@ -115,9 +114,6 @@ const CONFIG = {
     END: new Date(2027, 11, 1)   // Dec 1, 2027
   },
 
-  // Columns from Forecasting (by key) to display on the Overdue Details sheet
-  OVERDUE_DETAILS_DISPLAY_KEYS: ['PROJECT_NAME', 'DEADLINE', 'PROGRESS', 'ARCHITECT', 'EQUIPMENT'],
-
   // --- Dashboard Layout (1-indexed) ---
   DASHBOARD_LAYOUT: {
     YEAR_COL: 1,        // A
@@ -148,7 +144,7 @@ const CONFIG = {
     BANDING_COLOR_ODD: "#F8F9FA",
     BORDER_COLOR: "#CCCCCC",
     OVERDUE_ROW_HIGHLIGHT: "#FFEBEE",
-    MONTH_FORMAT: "mmmm yyyy",
+    MONTH_FORMAT: "mmmm",
     COUNT_FORMAT: "0",
     CHART_COLORS: {
         overdue: '#D32F2F',
