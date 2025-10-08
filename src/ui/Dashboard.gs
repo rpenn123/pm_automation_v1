@@ -10,26 +10,6 @@
  * V1.4.0 - 2025-10-07 - Expert GAS Architect
  *    - Definitive merge to resolve all conflicts between branches.
  */
-function parseAndNormalizeDate(dateValue) {
-  if (!dateValue) return null;
-
-  // Check if it's already a valid Date object
-  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
-    const normalized = new Date(dateValue.getTime());
-    normalized.setHours(0, 0, 0, 0);
-    return normalized;
-  }
-
-  // Attempt to parse if it's a string or number, which is common from spreadsheets
-  const parsedDate = new Date(dateValue);
-  if (isNaN(parsedDate.getTime())) {
-    return null; // Return null for invalid dates
-  }
-
-  parsedDate.setHours(0, 0, 0, 0);
-  return parsedDate;
-}
-
 
 /**
  * Main orchestrator to generate or update the Dashboard.
