@@ -39,40 +39,49 @@ const CONFIG = {
 
   // --- Forecasting Columns (1-indexed) ---
   FORECASTING_COLS: {
-    SFID: 1,          // A - Salesforce ID for unique record syncing
-    PROJECT_NAME: 2,  // B
-    DETAILS: 4,       // D (Used for Inventory transfer)
-    EQUIPMENT: 6,     // F
-    PROGRESS: 7,      // G (Synced with Upcoming F, Triggers Framing)
-    PERMITS: 8,       // H (Triggers Upcoming transfer)
-    ARCHITECT: 9,     // I (Used for Framing transfer)
-    DEADLINE: 10,     // J
-    DELIVERED: 12,    // L (Triggers Inventory transfer)
-    LOCATION: 16,     // P (Used for Upcoming transfer)
+    SFID: 1, // A - Salesforce ID for unique record syncing
+    PROJECT_NAME: 2, // B - The official name of the project
+    CREATED: 3, // C - The date the project record was created
+    DETAILS: 4, // D - Detailed description, used for Inventory transfer
+    PRIORITY: 5, // E - Priority level of the project
+    EQUIPMENT: 6, // F - Specific equipment being used
+    PROGRESS: 7, // G - Current status, synced with Upcoming sheet, triggers Framing automation
+    PERMITS: 8, // H - Permit status, triggers transfer to Upcoming sheet
+    ARCHITECT: 9, // I - Architect contact, used for Framing transfer
+    DEADLINE: 10, // J - The project's final deadline
+    SHIPPING: 11, // K - Shipping status for materials/equipment
+    DELIVERED: 12, // L - Delivery confirmation, triggers Inventory transfer
+    PERMITS_APPROVED: 13, // M - Date when permits were officially approved
+    START_DATE: 14, // N - The scheduled start date for construction
+    SITE_PREP: 15, // O - Status of the site preparation
+    LOCATION: 16, // P - Physical address, used for Upcoming transfer
+    OWNER: 17, // Q - The assigned project owner or manager
+    LAST_EDIT_AT_HIDDEN: 18, // R - Timestamp of the last edit (hidden from users)
+    LAST_EDIT: 20 // T - A user-friendly representation of the last edit time
   },
 
   // --- Upcoming Columns (1-indexed) ---
   UPCOMING_COLS: {
-    SFID: 1,               // A - Salesforce ID for unique record syncing
-    PROJECT_NAME: 2,       // B
-    CONSTRUCTION_START: 3, // C
-    DEADLINE: 4,           // D
-    PROGRESS: 5,           // E
-    EQUIPMENT: 6,          // F
-    PERMITS: 7,            // G
-    CONSTRUCTION: 8,       // H
+    SFID: 1, // A - Salesforce ID for unique record syncing
+    PROJECT_NAME: 2, // B - The official name of the project
+    CONSTRUCTION_START: 3, // C - The scheduled start date for construction
+    DEADLINE: 4, // D - The project's final deadline
+    PROGRESS: 5, // E - Current status of the project
+    EQUIPMENT: 6, // F - Specific equipment being used
+    PERMITS: 7, // G - Current status of the permits
+    CONSTRUCTION: 8, // H - Current status of the construction phase
     // Column I ("Tr") is intentionally unmapped as it's not part of any automation.
-    LOCATION: 10,          // J
-    NOTES: 11,             // K
+    LOCATION: 10, // J - Physical address of the project site
+    NOTES: 11 // K - Any relevant notes about the project
   },
 
   // --- Framing Columns (1-indexed) ---
   FRAMING_COLS: {
-    SFID: 1,        // A - Salesforce ID for unique record syncing
-    PROJECT_NAME: 2,// B
-    DEADLINE: 5,    // E
-    ARCHITECT: 7,   // G
-    EQUIPMENT: 9,   // I
+    SFID: 1, // A - Salesforce ID for unique record syncing
+    PROJECT_NAME: 2, // B - The official name of the project
+    DEADLINE: 5, // E - The project's final deadline
+    ARCHITECT: 7, // G - The architect assigned to the project
+    EQUIPMENT: 9 // I - Specific equipment being used
   },
 
   // --- Inventory Columns (1-indexed) ---
