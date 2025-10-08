@@ -61,21 +61,59 @@ function isTrueLike(val) {
 // =================================================================
 
 /**
- * Parses a value into a Date object and normalizes it to the beginning of the day (midnight).
- * This is essential for date-based comparisons where the time of day is irrelevant, such as
- * comparing deadlines in the Dashboard logic.
+ * Parses a value into a Date object and normalizes it to the beginning of the day (midnight) in the script's timezone.
+ * This is essential for date-based comparisons where the time of day is irrelevant.
+ * It robustly handles native Date objects, ISO-like strings (YYYY-MM-DD), and common US date formats (M/D/YYYY).
  *
- * @param {*} value The value to parse (can be a Date object, a date string, or a number).
+ * @param {*} input The value to parse (can be a Date object, a date string, or a number).
  * @returns {Date|null} A new Date object set to midnight, or `null` if the value is not a valid date.
  */
 function parseAndNormalizeDate(input) {
   if (!input) return null;
-  let date = (input instanceof Date) ? new Date(input.getTime()) : new Date(input);
-  // Check for validity
-  if (isNaN(date.getTime())) return null;
-  // Normalize: Set time to midnight
-  date.setHours(0, 0, 0, 0);
-  return date;
+
+  // 1. If it's already a valid Date object, normalize and return a copy.
+  if (input instanceof Date) {
+    if (isNaN(input.getTime())) return null; // Check for invalid Date objects
+    const date = new Date(input.getTime());
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  // 2. If it's a string, attempt to parse common formats.
+  if (typeof input === 'string') {
+    const trimmedInput = input.trim();
+    let date;
+
+    // Try to parse YYYY-MM-DD or YYYY/MM/DD format (handles ISO-like dates)
+    const isoMatch = trimmedInput.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      const year = parseInt(isoMatch[1], 10);
+      const month = parseInt(isoMatch[2], 10);
+      const day = parseInt(isoMatch[3], 10);
+      date = new Date(year, month - 1, day);
+    } else {
+      // Fallback for other formats recognized by the native parser, like MM/DD/YYYY.
+      // This is less reliable but provides a fallback.
+      date = new Date(trimmedInput);
+    }
+
+    if (date && !isNaN(date.getTime())) {
+      date.setHours(0, 0, 0, 0);
+      return date;
+    }
+  }
+
+  // 3. If it's a number (potentially from a spreadsheet), let the constructor handle it.
+  if (typeof input === 'number') {
+      const date = new Date(input);
+      if (date && !isNaN(date.getTime())) {
+          date.setHours(0, 0, 0, 0);
+          return date;
+      }
+  }
+
+  // 4. If all parsing attempts fail, return null.
+  return null;
 }
 
 /**
