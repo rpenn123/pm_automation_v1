@@ -32,7 +32,9 @@ const CONFIG = {
   STATUS_STRINGS: {
     IN_PROGRESS: "In Progress",
     PERMIT_APPROVED: "approved",
-    SCHEDULED: "Scheduled"
+    SCHEDULED: "Scheduled",
+    COMPLETED: "Completed",
+    CANCELLED: "Cancelled"
   },
 
   // --- Forecasting Columns (1-indexed) ---
