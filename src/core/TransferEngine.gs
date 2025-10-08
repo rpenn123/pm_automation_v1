@@ -58,7 +58,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
         sourceSheet: sourceSheet.getName(),
         sourceRow: editedRow,
         result: "skipped-no-lock"
-      });
+      }, CONFIG);
       return;
     }
 
@@ -100,7 +100,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
         sourceRow: editedRow,
         details: "Missing both SFID and Project Name",
         result: "skipped"
-      });
+      }, CONFIG);
       return;
     }
 
@@ -117,7 +117,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
           projectName: projectName,
           details: "Duplicate",
           result: "skipped-duplicate"
-        });
+        }, CONFIG);
         return;
       }
     }
@@ -150,7 +150,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
     
     // Update Last Edit tracking on the destination sheet if applicable
     if (config.lastEditTrackedSheets && config.lastEditTrackedSheets.includes(config.destinationSheetName)) {
-        updateLastEditForRow(destinationSheet, appendedRow);
+        updateLastEditForRow(destinationSheet, appendedRow, CONFIG);
     }
 
     // Post Transfer Actions (e.g., Sorting)
@@ -163,7 +163,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
         range.sort({ column: sortColumn, ascending: !!sortAscending });
       } catch (sortError) {
         // Notify about sort failure, but the transfer itself succeeded
-        notifyError(`${config.transferName} completed, but sorting failed`, sortError, ss);
+        notifyError(`${config.transferName} completed, but sorting failed`, sortError, ss, CONFIG);
       }
     }
 
@@ -175,11 +175,11 @@ function executeTransfer(e, config, preReadSourceRowData) {
       projectName: projectName,
       details: `Appended to ${config.destinationSheetName} row ${appendedRow}`,
       result: "success"
-    });
+    }, CONFIG);
 
   } catch (error) {
     Logger.log(`${config.transferName} Error: ${error}\n${error.stack}`);
-    notifyError(`${config.transferName} failed`, error, ss);
+    notifyError(`${config.transferName} failed`, error, ss, CONFIG);
     logAudit(ss, {
       action: config.transferName,
       sourceSheet: sourceSheet.getName(),
@@ -187,7 +187,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
       projectName: projectName, // Use the initialized project name if available
       result: "error",
       errorMessage: String(error)
-    });
+    }, CONFIG);
   } finally {
     // Ensure the lock is always released
     if (lockAcquired) lock.releaseLock();

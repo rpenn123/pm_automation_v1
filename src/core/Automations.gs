@@ -86,7 +86,7 @@ function onEdit(e) {
             details: `Col ${editedCol}`,
             result: "error",
             errorMessage: String(error)
-          });
+          }, config);
         }
         return; // Stop after the first matching rule.
       }
@@ -170,7 +170,7 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config) {
     lockAcquired = acquireLockWithRetry(lock);
     if (!lockAcquired) {
       Logger.log(`${actionName}: Lock not acquired for ${logIdentifier} after multiple retries. Skipping.`);
-      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" });
+      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" }, config);
       return;
     }
 
@@ -184,17 +184,17 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config) {
       if (normalizeForComparison(targetCell.getValue()) !== normalizeForComparison(newValue)) {
         targetCell.setValue(newValue);
         updateLastEditForRow(upcomingSheet, row, config);
-        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" });
+        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" }, config);
       } else {
-        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
+        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" }, config);
       }
     } else {
-      logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, details: "Project not found", result: "miss" });
+      logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, details: "Project not found", result: "miss" }, config);
     }
   } catch (error) {
     Logger.log(`${actionName} error for ${logIdentifier}: ${error}\n${error.stack}`);
     notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss, config);
-    logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) });
+    logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) }, config);
   } finally {
     if (lockAcquired) lock.releaseLock();
   }
@@ -224,7 +224,7 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config
     lockAcquired = acquireLockWithRetry(lock);
     if (!lockAcquired) {
       Logger.log(`${actionName}: Lock not acquired for ${logIdentifier} after multiple retries. Skipping.`);
-      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" });
+      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" }, config);
       return;
     }
 
@@ -238,17 +238,17 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config
       if (normalizeForComparison(targetCell.getValue()) !== normalizeForComparison(newValue)) {
         targetCell.setValue(newValue);
         updateLastEditForRow(forecastingSheet, row, config);
-        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" });
+        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" }, config);
       } else {
-        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" });
+        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" }, config);
       }
     } else {
-      logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, details: "Project not found", result: "miss" });
+      logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, details: "Project not found", result: "miss" }, config);
     }
   } catch (error) {
     Logger.log(`${actionName} error for ${logIdentifier}: ${error}\n${error.stack}`);
     notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss, config);
-    logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) });
+    logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) }, config);
   } finally {
     if (lockAcquired) lock.releaseLock();
   }
