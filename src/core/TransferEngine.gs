@@ -125,9 +125,9 @@ function executeTransfer(e, config, preReadSourceRowData) {
     // Build the destination row
     const mapping = config.destinationColumnMapping || {};
     const maxMappedCol = getMaxValueInObject(mapping);
-    // Determine the width of the new row
-    const destLastCol = Math.max(destinationSheet.getLastColumn(), maxMappedCol);
-    const newRow = new Array(destLastCol).fill(""); // Initialize with empty strings
+    // Determine the width of the new row, ensuring it matches the full sheet width.
+    const destWidth = Math.max(destinationSheet.getMaxColumns(), maxMappedCol);
+    const newRow = new Array(destWidth).fill(""); // Initialize with empty strings
 
     for (const sourceColStr in mapping) {
       if (!Object.prototype.hasOwnProperty.call(mapping, sourceColStr)) continue;
