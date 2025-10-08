@@ -170,7 +170,7 @@ function getMonthKeyPadded(d) {
  * @returns {number} The 1-based column index of the header, or -1 if not found.
  */
 function getHeaderColumnIndex(sheet, headerText) {
-  const lastCol = sheet.getLastColumn();
+  const lastCol = sheet.getMaxColumns();
   if (lastCol < 1) return -1;
   const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v).trim());
   
