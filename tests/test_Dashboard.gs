@@ -3,12 +3,12 @@
  */
 
 /**
- * Test case to ensure that only ACTIVE projects with a past deadline are counted as "Overdue".
- * A project that is non-complete (e.g., "On Hold") but not active should not be counted.
+ * Test case to ensure that any NON-COMPLETE project (regardless of active status)
+ * with a past deadline is correctly counted as "Overdue".
  */
-function test_nonActiveProject_isNotCountedAsOverdue() {
+function test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue() {
   // 1. Setup
-  const testName = "test_nonActiveProject_isNotCountedAsOverdue";
+  const testName = "test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue";
   let assertions = 0;
   let failures = 0;
   console.log(`RUNNING: ${testName}...`);
@@ -61,8 +61,8 @@ function test_nonActiveProject_isNotCountedAsOverdue() {
 
   // 3. Assertion
   try {
-    // The correct behavior is that the "On Hold" project should NOT be counted as overdue.
-    assertEquals(0, overdueCount, "Overdue count should be 0 for a non-active (On Hold) project.");
+    // With the fix, the "On Hold" project should now correctly be counted as overdue.
+    assertEquals(1, overdueCount, "Overdue count should be 1 for a non-complete (On Hold) project with a past deadline.");
     assertions++;
   } catch (e) {
     console.error(`${testName} FAILED: ${e.message}`);

@@ -83,6 +83,9 @@ const dashboardGs = fs.readFileSync('src/ui/Dashboard.gs', 'utf8');
 const testGs = fs.readFileSync('tests/bugfix-robust-find-test.gs', 'utf8');
 const existingTestGs = fs.readFileSync('tests/test_Utilities.gs', 'utf8');
 const chartTitleTestGs = fs.readFileSync('tests/chart_title.test.gs', 'utf8');
+const overdueTestGs = fs.readFileSync('tests/bugfix-overdue-test.gs', 'utf8');
+const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
+
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
@@ -94,6 +97,9 @@ eval(dashboardGs);
 eval(testGs);
 eval(existingTestGs);
 eval(chartTitleTestGs);
+eval(overdueTestGs);
+eval(dashboardTestGs);
+
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -107,6 +113,10 @@ try {
     runUtilityTests();
     console.log("\n--- Running chart title tests ---");
     runChartTitleTests();
+    console.log("\n--- Running overdue bugfix tests ---");
+    runOverdueBugFixTests();
+    console.log("\n--- Running dashboard tests ---");
+    test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);
