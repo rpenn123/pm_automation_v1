@@ -183,10 +183,9 @@ function getHeaderColumnIndex(sheet, headerText) {
 
 /**
  * Performs a robust, case-insensitive search for a project by name and returns its 1-based row index.
- * This function uses a two-stage lookup for both performance and accuracy:
- * 1.  **TextFinder:** It first uses the highly optimized `TextFinder` for an exact, full-cell match.
- * 2.  **Manual Scan:** If `TextFinder` fails, it falls back to a manual row-by-row scan, which can
- *     sometimes catch edge cases or differently formatted data that TextFinder might miss.
+ * This function uses a manual, row-by-row scan that normalizes both the search term and the
+ * sheet values using `formatValueForKey`. This ensures that comparisons are consistent with
+ * the duplicate checker and correctly handle values that might look like dates (e.g., "10/25/2024").
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search.
  * @param {string} projectName The name of the project to find.
@@ -203,10 +202,6 @@ function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
     if (lastRow < 2) return -1;
     const range = sheet.getRange(2, projectNameCol, lastRow - 1, 1);
 
-    const tf = range.createTextFinder(searchNameTrimmed).matchCase(false).matchEntireCell(true);
-    const found = tf.findNext();
-    if (found) return found.getRow();
-
     const vals = range.getValues();
     // Use formatValueForKey to handle dates and other types consistently.
     const targetKey = formatValueForKey(searchNameTrimmed);
@@ -220,7 +215,7 @@ function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
     return -1;
   } catch (error) {
     Logger.log(`findRowByProjectNameRobust error on "${sheet.getName()}": ${error}`);
-    notifyError(`TextFinder lookup failed for "${projectName}" in "${sheet.getName()}"`, error, sheet.getParent() || SpreadsheetApp.getActiveSpreadsheet());
+    notifyError(`Robust lookup failed for "${projectName}" in "${sheet.getName()}"`, error, sheet.getParent() || SpreadsheetApp.getActiveSpreadsheet());
     return -1;
   }
 }
