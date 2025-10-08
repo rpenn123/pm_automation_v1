@@ -48,9 +48,53 @@ const MockSheet = {
  */
 function runUtilityTests() {
   console.log('Running tests for Utilities.gs...');
+  testParseAndNormalizeDate_NumericInputBug();
   testFindRowByValue_WhitespaceBug();
   testFormatValueForKey_DateHandling();
   console.log('All Utilities tests passed!');
+}
+
+/**
+ * Test case for the numeric project name bug in parseAndNormalizeDate.
+ * This test ensures that strings or numbers that are purely numeric are not
+ * incorrectly interpreted as dates. This is critical for projects with
+ * numeric names (e.g., "34567").
+ */
+function testParseAndNormalizeDate_NumericInputBug() {
+  console.log('Running test: testParseAndNormalizeDate_NumericInputBug');
+
+  const testCases = {
+    "Numeric String": "34567",
+    "Raw Number": 34567,
+    "Valid Date String": "2024-10-25",
+    "Non-Numeric String": "Project Titan"
+  };
+
+  // 1. Test that a numeric string is NOT parsed as a date
+  let actual = parseAndNormalizeDate(testCases["Numeric String"]);
+  if (actual !== null) {
+    throw new Error(`Test Failed (Numeric String): Expected null, but got '${actual}'`);
+  }
+
+  // 2. Test that a raw number is NOT parsed as a date
+  actual = parseAndNormalizeDate(testCases["Raw Number"]);
+  if (actual !== null) {
+    throw new Error(`Test Failed (Raw Number): Expected null, but got '${actual}'`);
+  }
+
+  // 3. Verify that valid date strings are still parsed correctly
+  actual = parseAndNormalizeDate(testCases["Valid Date String"]);
+  if (!actual || actual.getUTCFullYear() !== 2024) {
+      throw new Error(`Test Failed (Valid Date String): Expected a valid date, but got '${actual}'`);
+  }
+
+  // 4. Verify that non-numeric strings are correctly identified as non-dates
+  actual = parseAndNormalizeDate(testCases["Non-Numeric String"]);
+  if (actual !== null) {
+    throw new Error(`Test Failed (Non-Numeric String): Expected null, but got '${actual}'`);
+  }
+
+  console.log('Test passed: testParseAndNormalizeDate_NumericInputBug');
 }
 
 // =================================================================
