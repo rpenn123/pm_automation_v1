@@ -19,5 +19,8 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Run regression tests
+        run: node run_test.js
+
       - name: Validate Deploy Configs
         run: npm run validate-config
