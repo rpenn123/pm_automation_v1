@@ -78,13 +78,22 @@ global.MockRange = class {
 
 // Load the script content from the .gs files
 const utilitiesGs = fs.readFileSync('src/core/Utilities.gs', 'utf8');
+let configGs = fs.readFileSync('src/Config.gs', 'utf8');
+const dashboardGs = fs.readFileSync('src/ui/Dashboard.gs', 'utf8');
 const testGs = fs.readFileSync('tests/bugfix-robust-find-test.gs', 'utf8');
 const existingTestGs = fs.readFileSync('tests/test_Utilities.gs', 'utf8');
+const chartTitleTestGs = fs.readFileSync('tests/chart_title.test.gs', 'utf8');
+
+// Make CONFIG global for tests
+configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
 
 // Use 'eval' to make the functions available in the current scope.
 eval(utilitiesGs);
+eval(configGs);
+eval(dashboardGs);
 eval(testGs);
 eval(existingTestGs);
+eval(chartTitleTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -96,6 +105,8 @@ try {
     runRobustFindTest();
     console.log("\n--- Running existing utility tests ---");
     runUtilityTests();
+    console.log("\n--- Running chart title tests ---");
+    runChartTitleTests();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);
