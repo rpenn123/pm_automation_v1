@@ -233,7 +233,7 @@ function findRowByValue(sheet, value, column) {
   if (lastRow < 2) return -1;
 
   const values = sheet.getRange(2, column, lastRow - 1, 1).getValues();
-  const searchValue = String(value);
+  const searchValue = String(value).trim();
 
   for (let i = 0; i < values.length; i++) {
     // Trim the sheet value to make the comparison robust against whitespace.
