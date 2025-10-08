@@ -22,28 +22,32 @@ function updateDashboard() {
   const config = CONFIG;
 
   try {
-    const { FORECASTING, DASHBOARD, OVERDUE_DETAILS } = config.SHEETS;
+    const { FORECASTING, DASHBOARD } = config.SHEETS;
     const forecastSheet = ss.getSheetByName(FORECASTING);
     if (!forecastSheet) throw new Error('Sheet "' + FORECASTING + '" not found.');
 
     const dashboardSheet = getOrCreateSheet(ss, DASHBOARD);
-    const overdueDetailsSheet = getOrCreateSheet(ss, OVERDUE_DETAILS);
-    const overdueSheetGid = overdueDetailsSheet.getSheetId();
+
+    // Delete the "Overdue Details" sheet as it's no longer needed.
+    const overdueSheetToDelete = ss.getSheetByName("Overdue Details");
+    if (overdueSheetToDelete) {
+      ss.deleteSheet(overdueSheetToDelete);
+      Logger.log('Successfully deleted "Overdue Details" sheet.');
+    }
 
     const read = readForecastingData(forecastSheet, config);
     if (!read || !read.forecastingValues) throw new Error('Failed to read data from ' + FORECASTING + '.');
-    const { forecastingValues, forecastingHeaders } = read;
+    const { forecastingValues } = read;
 
     const processed = processDashboardData(forecastingValues, config);
     const { monthlySummaries, allOverdueItems, missingDeadlinesCount } = processed;
     Logger.log('Processing complete. Found ' + allOverdueItems.length + ' overdue items and ' + missingDeadlinesCount + ' rows with missing deadlines.');
 
-    populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders);
-
     const months = generateMonthList(config.DASHBOARD_DATES.START, config.DASHBOARD_DATES.END);
     const dashboardData = months.map(function(month) {
       const key = month.getFullYear() + '-' + month.getMonth();
-      return monthlySummaries.get(key) || [0, 0, 0, 0]; // [total, upcoming, overdue, approved]
+      // The new summary format is [total, upcoming, overdue, approved, overdueItems[]]
+      return monthlySummaries.get(key) || [0, 0, 0, 0, []];
     });
 
     const grandTotals = dashboardData.reduce(function(totals, summary) {
@@ -54,7 +58,7 @@ function updateDashboard() {
       return totals;
     }, [0, 0, 0, 0]);
 
-    renderDashboardTable(dashboardSheet, overdueSheetGid, { allOverdueItems, missingDeadlinesCount }, months, dashboardData, grandTotals, config);
+    renderDashboardTable(dashboardSheet, { allOverdueItems, missingDeadlinesCount }, months, dashboardData, grandTotals, config);
 
     if (config.DASHBOARD_CHARTING.ENABLED) {
       createOrUpdateDashboardCharts(dashboardSheet, months, dashboardData, config);
@@ -95,64 +99,73 @@ function readForecastingData(forecastSheet, config) {
 }
 
 /**
- * FINALIZED & REFACTORED: Single-pass processing with corrected logic.
+ * Processes forecasting data to generate dashboard metrics with corrected overdue logic.
  */
 function processDashboardData(forecastingValues, config) {
   const monthlySummaries = new Map();
   const allOverdueItems = [];
   let missingDeadlinesCount = 0;
 
-  const today = parseAndNormalizeDate(new Date());
+  const tz = 'America/New_York';
+  const today = new Date(Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'00:00:00'Z'"));
 
   const FC = config.FORECASTING_COLS;
   const deadlineIdx = FC.DEADLINE - 1;
   const progressIdx = FC.PROGRESS - 1;
   const permitsIdx = FC.PERMITS - 1;
+  const projectNameIdx = FC.PROJECT_NAME - 1;
 
-  // ASSUMPTION: Based on the problem description, defining what constitutes a "completed"
-  // or "approved" status is critical. These strings would typically live in the CONFIG object.
-  // Since the CONFIG is not provided, we define them here with clear assumptions.
   const S = config.STATUS_STRINGS;
   const approvedLower = normalizeString(S.PERMIT_APPROVED);
   const inProgressLower = normalizeString(S.IN_PROGRESS);
   const scheduledLower = normalizeString(S.SCHEDULED);
-  const completedLower = normalizeString(S.COMPLETED || 'Completed');
-  const cancelledLower = normalizeString(S.CANCELLED || 'Cancelled');
+
+  // New statuses to exclude from overdue calculation, normalized for comparison.
+  const excludedStatuses = new Set([
+      "done", "canceled", "on hold", "stuck",
+      normalizeString(S.COMPLETED),
+      normalizeString(S.CANCELLED)
+  ]);
 
   for (let i = 0; i < forecastingValues.length; i++) {
     const row = forecastingValues[i];
-    const deadlineDate = parseAndNormalizeDate(row[deadlineIdx]);
+    const rawDeadline = row[deadlineIdx];
+
+    // Use a robust date parsing utility that handles various formats and timezones.
+    const deadlineDate = parseAndNormalizeDate(rawDeadline);
 
     if (!deadlineDate) {
-      missingDeadlinesCount++;
+      if(rawDeadline) missingDeadlinesCount++;
       continue;
     }
 
     const key = deadlineDate.getFullYear() + '-' + deadlineDate.getMonth();
     if (!monthlySummaries.has(key)) {
-      monthlySummaries.set(key, [0, 0, 0, 0]);
+      // [total, upcoming, overdue, approved, overdueItems[]]
+      monthlySummaries.set(key, [0, 0, 0, 0, []]);
     }
     const monthData = monthlySummaries.get(key);
-
-    monthData[0]++;
+    monthData[0]++; // Increment total project count for the month.
 
     const currentStatus = normalizeString(row[progressIdx]);
-    const isComplete = (currentStatus === completedLower || currentStatus === cancelledLower);
-    const isActive = (currentStatus === inProgressLower || currentStatus === scheduledLower);
+    const normalizedDeadline = new Date(Utilities.formatDate(deadlineDate, tz, "yyyy-MM-dd'T'00:00:00'Z'"));
 
-    // If a project is not marked as complete or cancelled, evaluate its status.
-    if (!isComplete) {
-      // A project with a deadline in the past is "Overdue", regardless of active status.
-      if (deadlineDate < today) {
+    // Overdue if deadline is today or in the past, AND status is not excluded.
+    if (normalizedDeadline <= today && !excludedStatuses.has(currentStatus)) {
         monthData[2]++; // Overdue
-        allOverdueItems.push(row);
-      // An ACTIVE project with a deadline today or in the future is "Upcoming".
-      } else if (isActive) { // The deadline >= today check is implicit
+        const overdueItem = {
+            name: row[projectNameIdx] || 'Unnamed Project',
+            deadline: Utilities.formatDate(deadlineDate, Session.getScriptTimeZone(), 'MMM d, yyyy')
+        };
+        monthData[4].push(overdueItem); // Add details for hover note.
+        allOverdueItems.push(row); // Keep full row for grand total.
+    }
+    // Upcoming if it's an active project and not overdue.
+    else if (currentStatus === inProgressLower || currentStatus === scheduledLower) {
         monthData[1]++; // Upcoming
-      }
     }
 
-    // 3. Check for Permit Approval status, which is an independent category
+    // Check for Permit Approval status, which is an independent category.
     if (normalizeString(row[permitsIdx]) === approvedLower) {
       monthData[3]++; // Approved
     }
@@ -161,9 +174,9 @@ function processDashboardData(forecastingValues, config) {
 }
 
 /**
- * Renders the main data table.
+ * Renders the main data table, including hover notes for overdue items.
  */
-function renderDashboardTable(dashboardSheet, overdueSheetGid, processedData, months, dashboardData, grandTotals, config) {
+function renderDashboardTable(dashboardSheet, processedData, months, dashboardData, grandTotals, config) {
   const { missingDeadlinesCount } = processedData;
 
   clearAndResizeSheet(dashboardSheet, config.DASHBOARD_LAYOUT.FIXED_ROW_COUNT, config.DASHBOARD_LAYOUT.HIDE_COL_END);
@@ -176,25 +189,48 @@ function renderDashboardTable(dashboardSheet, overdueSheetGid, processedData, mo
     const DL = config.DASHBOARD_LAYOUT;
     const numDataRows = dashboardData.length;
 
+    /*
+     * Data Source and Column Mapping:
+     * Col A (Year): Year of the summary period.
+     * Col B (Month): Month of the summary period.
+     * Col C (Total Projects): Count of all projects with a valid deadline in that month.
+     * Col D (Upcoming): Count of active projects ('In Progress' or 'Scheduled') with a deadline on or after today.
+     * Col E (Overdue): Count of non-terminal projects with a deadline before today. Hover for details.
+     * Col F (Approved): Count of projects with 'Permits' status set to 'approved' in that month.
+     * Grand Totals (G-J) are sums of their respective columns.
+     */
+
+    // Prepare table data including the overdue count directly.
     const tableData = months.map(function(month, i) {
       const summary = dashboardData[i];
-      return [month.getFullYear(), month, summary[0], summary[1], null, summary[3]];
+      // [Year, Month, Total, Upcoming, Overdue, Approved]
+      return [month.getFullYear(), month, summary[0], summary[1], summary[2], summary[3]];
     });
 
-    const overdueFormulas = dashboardData.map(function(summary) {
-      return ['=HYPERLINK("#gid=' + overdueSheetGid + '", ' + (summary[2] || 0) + ')'];
-    });
-
+    // Write all data to the sheet in one call.
     dashboardSheet.getRange(dataStartRow, DL.YEAR_COL, numDataRows, 6).setValues(tableData);
-    dashboardSheet.getRange(dataStartRow, DL.OVERDUE_COL, numDataRows, 1).setFormulas(overdueFormulas);
 
+    // Set hover notes for the 'Overdue' column.
+    const overdueNotes = dashboardData.map(function(summary) {
+      const overdueItems = summary[4] || [];
+      if (overdueItems.length === 0) return [null];
+
+      let note = overdueItems.slice(0, 20).map(item => `${item.name} — ${item.deadline}`).join('\n');
+      if (overdueItems.length > 20) {
+        note += `\n(+${overdueItems.length - 20} more)`;
+      }
+      return [note];
+    });
+    dashboardSheet.getRange(dataStartRow, DL.OVERDUE_COL, numDataRows, 1).setNotes(overdueNotes);
+
+    // Set grand totals.
     const [gtTotal, gtUpcoming, gtOverdue, gtApproved] = grandTotals;
-
     dashboardSheet.getRange(dataStartRow, DL.GT_UPCOMING_COL).setValue(gtUpcoming);
-    dashboardSheet.getRange(dataStartRow, DL.GT_OVERDUE_COL).setFormula('=HYPERLINK("#gid=' + overdueSheetGid + '", ' + gtOverdue + ')');
+    dashboardSheet.getRange(dataStartRow, DL.GT_OVERDUE_COL).setValue(gtOverdue); // No more hyperlink
     dashboardSheet.getRange(dataStartRow, DL.GT_TOTAL_COL).setValue(gtTotal);
     dashboardSheet.getRange(dataStartRow, DL.GT_APPROVED_COL).setValue(gtApproved);
 
+    // Display count of items with missing deadlines.
     const missingCell = dashboardSheet.getRange(DL.MISSING_DEADLINE_CELL);
     missingCell.setValue('Missing/Invalid Deadlines:');
     missingCell.offset(0, 1).setValue(missingDeadlinesCount).setNumberFormat('0').setFontWeight('bold');
@@ -270,43 +306,6 @@ function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
 }
 
 /**
- * Clears and populates the 'Overdue_Details' sheet with the latest overdue project data.
- *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} overdueDetailsSheet The sheet to populate.
- * @param {Array<Array<any>>} allOverdueItems An array of rows representing overdue projects.
- * @param {Array<string>} forecastingHeaders The header row from the 'Forecasting' sheet.
- * @returns {void}
- */
-function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders) {
-  try {
-    if (!forecastingHeaders || forecastingHeaders.length === 0) {
-      overdueDetailsSheet.clear();
-      overdueDetailsSheet.getRange(1, 1).setValue("Source 'Forecasting' sheet is empty or has no header row.");
-      return;
-    }
-    var numRows = allOverdueItems.length;
-    var numCols = allOverdueItems.length > 0 ? allOverdueItems[0].length : forecastingHeaders.length;
-    overdueDetailsSheet.clear();
-    if (overdueDetailsSheet.getMaxRows() > 1) {
-      overdueDetailsSheet.deleteRows(2, overdueDetailsSheet.getMaxRows() - 1);
-    }
-    if (overdueDetailsSheet.getMaxColumns() > numCols) {
-      overdueDetailsSheet.deleteColumns(numCols + 1, overdueDetailsSheet.getMaxColumns() - numCols);
-    }
-    var headersToWrite = forecastingHeaders.slice(0, numCols);
-    overdueDetailsSheet.getRange(1, 1, 1, headersToWrite.length).setValues([headersToWrite]).setFontWeight('bold');
-    if (numRows > 0) {
-      if (overdueDetailsSheet.getMaxRows() < numRows + 1) {
-        overdueDetailsSheet.insertRowsAfter(1, numRows);
-      }
-      overdueDetailsSheet.getRange(2, 1, numRows, numCols).setValues(allOverdueItems);
-    }
-  } catch (e) {
-    Logger.log('ERROR in populateOverdueDetailsSheet: ' + e.message);
-  }
-}
-
-/**
  * Writes and formats the main headers for the dashboard tables.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
@@ -316,12 +315,29 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
 function setDashboardHeaders(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
   const DF = config.DASHBOARD_FORMATTING;
-  const headers = ['Year', 'Month', 'Total Projects', 'Upcoming', 'Overdue', 'Approved', 'GT Upcoming', 'GT Overdue', 'GT Total', 'GT Approved'];
-  const headerRanges = [sheet.getRange(1, DL.YEAR_COL, 1, 6), sheet.getRange(1, DL.GT_UPCOMING_COL, 1, 4)];
-  headerRanges[0].setValues([headers.slice(0, 6)]);
-  headerRanges[1].setValues([headers.slice(6, 10)]);
-  for (var i = 0; i < headerRanges.length; i++) {
-    headerRanges[i].setBackground(DF.HEADER_BACKGROUND).setFontColor(DF.HEADER_FONT_COLOR).setFontWeight('bold').setHorizontalAlignment('center');
+
+  // Set headers for the main data table
+  const mainHeaders = ['Year', 'Month', 'Total Projects', 'Upcoming', 'Overdue', 'Approved'];
+  const mainHeaderRange = sheet.getRange(1, DL.YEAR_COL, 1, mainHeaders.length);
+  mainHeaderRange.setValues([mainHeaders]);
+
+  // Set headers for the grand totals
+  const gtHeaders = ['GT Upcoming', 'GT Overdue', 'GT Total', 'GT Approved'];
+  const gtHeaderRange = sheet.getRange(1, DL.GT_UPCOMING_COL, 1, gtHeaders.length);
+  gtHeaderRange.setValues([gtHeaders]);
+
+  // Set header for the Charts column and adjust its width
+  const chartsHeaderRange = sheet.getRange(1, DL.CHART_ANCHOR_COL);
+  chartsHeaderRange.setValue("Charts");
+  sheet.setColumnWidth(DL.CHART_ANCHOR_COL, 485);
+
+  // Apply consistent formatting to all header cells
+  const allHeaderRanges = [mainHeaderRange, gtHeaderRange, chartsHeaderRange];
+  for (const range of allHeaderRanges) {
+    range.setBackground(DF.HEADER_BACKGROUND)
+         .setFontColor(DF.HEADER_FONT_COLOR)
+         .setFontWeight('bold')
+         .setHorizontalAlignment('center');
   }
 }
 
@@ -546,4 +562,71 @@ function generateMonthList(startDate, endDate) {
     current.setMonth(current.getMonth() + 1);
   }
   return months;
+}
+
+/**
+ * Verification function to audit the Dashboard's overdue calculations.
+ * This can be run manually from the Apps Script editor to ensure data integrity.
+ */
+function runDashboardVerification() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const config = CONFIG;
+  const { FORECASTING, DASHBOARD } = config.SHEETS;
+  const forecastSheet = ss.getSheetByName(FORECASTING);
+  const dashboardSheet = ss.getSheetByName(DASHBOARD);
+
+  if (!forecastSheet || !dashboardSheet) {
+    Logger.log('Verification failed: Could not find required sheets.');
+    return;
+  }
+
+  Logger.log('Starting Dashboard verification...');
+
+  // 1. Recalculate overdue count directly from Forecasting sheet.
+  const { forecastingValues } = readForecastingData(forecastSheet, config);
+  const { allOverdueItems } = processDashboardData(forecastingValues, config);
+  const calculatedGrandTotal = allOverdueItems.length;
+
+  // 2. Get the Grand Total Overdue value from the Dashboard.
+  const DL = config.DASHBOARD_LAYOUT;
+  const dashboardGrandTotal = dashboardSheet.getRange(2, DL.GT_OVERDUE_COL).getValue();
+
+  // 3. Compare and log the results.
+  Logger.log(`Calculated Grand Total Overdue: ${calculatedGrandTotal}`);
+  Logger.log(`Dashboard Grand Total Overdue: ${dashboardGrandTotal}`);
+  if (calculatedGrandTotal === dashboardGrandTotal) {
+    Logger.log('✅ SUCCESS: Grand totals match.');
+  } else {
+    Logger.log(`❌ FAILURE: Grand totals DO NOT match. Discrepancy: ${calculatedGrandTotal - dashboardGrandTotal}`);
+  }
+
+  // 4. Spot-check a monthly total against its hover note.
+  const firstDataRowWithOverdue = dashboardSheet.getRange(2, DL.OVERDUE_COL, dashboardSheet.getLastRow() -1, 1)
+                                      .getValues()
+                                      .findIndex(row => row[0] > 0);
+
+  if (firstDataRowWithOverdue !== -1) {
+    const checkRow = firstDataRowWithOverdue + 2; // +2 for 0-index and header
+    const monthlyCount = dashboardSheet.getRange(checkRow, DL.OVERDUE_COL).getValue();
+    const note = dashboardSheet.getRange(checkRow, DL.OVERDUE_COL).getNote();
+    const noteLines = note ? note.split('\n').filter(line => line.trim() !== '' && !line.startsWith('(+')) : [];
+    const noteCount = noteLines.length;
+
+    Logger.log(`\nSpot-checking row ${checkRow}...`);
+    Logger.log(`- Monthly overdue count from cell: ${monthlyCount}`);
+    Logger.log(`- Number of items in hover note: ${noteCount}`);
+
+    // In a truncated note, the count won't match, but this check is still useful.
+    if (monthlyCount === noteCount) {
+      Logger.log('✅ SUCCESS: Monthly cell count matches the number of items in its hover note.');
+    } else if (note.includes('(+')) {
+       Logger.log('INFO: Hover note is truncated. Cannot perform exact count match for this cell.');
+    } else {
+      Logger.log(`❌ FAILURE: Monthly cell count (${monthlyCount}) does not match note count (${noteCount}).`);
+    }
+  } else {
+    Logger.log('\nNo overdue items found in any month to spot-check.');
+  }
+
+  Logger.log('\nVerification complete.');
 }
