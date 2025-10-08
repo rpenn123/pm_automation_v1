@@ -121,6 +121,7 @@ const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
 const dataLossTestGs = fs.readFileSync('tests/test_data_loss.gs', 'utf8');
 const auditTestGs = fs.readFileSync('tests/test_AuditLogging.gs', 'utf8');
 const hoverNotesTestGs = fs.readFileSync('tests/test_Dashboard_HoverNotes.gs', 'utf8');
+const transferEngineTestGs = fs.readFileSync('tests/test_TransferEngine.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
@@ -137,6 +138,7 @@ eval(lastEditServiceGs);
 eval(loggerServiceGs);
 eval(automationsGs);
 transferEngineGs = transferEngineGs.replace('function executeTransfer(', 'global.executeTransfer = function executeTransfer(');
+transferEngineGs = transferEngineGs.replace('function isDuplicateInDestination(', 'global.isDuplicateInDestination = function isDuplicateInDestination(');
 eval(transferEngineGs); // TransferEngine is needed by Automations
 
 eval(testGs);
@@ -146,6 +148,7 @@ eval(dashboardTestGs);
 eval(dataLossTestGs);
 eval(auditTestGs);
 eval(hoverNotesTestGs);
+eval(transferEngineTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -167,6 +170,8 @@ try {
     runAuditLoggingTests();
     console.log("\n--- Running Dashboard Hover Notes test ---");
     test_Dashboard_HoverNotes();
+    console.log("\n--- Running Transfer Engine tests ---");
+    runTransferEngineTests();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);
