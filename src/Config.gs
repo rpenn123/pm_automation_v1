@@ -6,6 +6,14 @@
  * Code MUST subtract 1 when accessing array indices (0-based).
  */
 
+/**
+ * Global configuration object for the entire application.
+ * This object centralizes all settings, including sheet names, column mappings,
+ * status strings, and dashboard layout, to make maintenance and updates easier.
+ * All column numbers are 1-indexed to match the user-facing spreadsheet view.
+ *
+ * @const {object}
+ */
 const CONFIG = {
   APP_NAME: "Sheet Automations & Dashboard",
   

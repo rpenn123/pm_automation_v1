@@ -201,6 +201,14 @@ function renderDashboardTable(dashboardSheet, overdueSheetGid, processedData, mo
   }
 }
 
+/**
+ * Sets explanatory notes on the dashboard header cells.
+ * These notes provide users with definitions for each column, improving clarity.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @param {object} config The global configuration object.
+ * @returns {void}
+ */
 function setDashboardHeaderNotes(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
   sheet.getRange(1, DL.TOTAL_COL).setNote('Total projects with a deadline in this month.');
@@ -210,6 +218,15 @@ function setDashboardHeaderNotes(sheet, config) {
   sheet.getRange(1, DL.GT_TOTAL_COL).setNote('Grand total for all projects shown in the table.');
 }
 
+/**
+ * Applies all visual formatting to the dashboard table.
+ * This includes row banding, text alignment, number formats, and borders.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @param {number} numDataRows The number of data rows to format.
+ * @param {object} config The global configuration object.
+ * @returns {void}
+ */
 function applyDashboardFormatting(sheet, numDataRows, config) {
   const DL = config.DASHBOARD_LAYOUT;
   const DF = config.DASHBOARD_FORMATTING;
@@ -229,6 +246,16 @@ function applyDashboardFormatting(sheet, numDataRows, config) {
        .setBorder(true, true, true, true, true, true, DF.BORDER_COLOR, SpreadsheetApp.BorderStyle.SOLID_THIN);
 }
 
+/**
+ * Displays a placeholder message in the area designated for a chart.
+ * This is used when chart data is unavailable or a chart fails to render.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
+ * @param {number} anchorRow The row where the chart would be anchored.
+ * @param {number} anchorCol The column where the chart would be anchored.
+ * @param {string} message The message to display in the placeholder.
+ * @returns {void}
+ */
 function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
   try {
     var placeholderRange = sheet.getRange(anchorRow + 5, anchorCol, 1, 4);
@@ -239,6 +266,14 @@ function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
   }
 }
 
+/**
+ * Clears and populates the 'Overdue_Details' sheet with the latest overdue project data.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} overdueDetailsSheet The sheet to populate.
+ * @param {Array<Array<any>>} allOverdueItems An array of rows representing overdue projects.
+ * @param {Array<string>} forecastingHeaders The header row from the 'Forecasting' sheet.
+ * @returns {void}
+ */
 function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forecastingHeaders) {
   try {
     if (!forecastingHeaders || forecastingHeaders.length === 0) {
@@ -268,6 +303,13 @@ function populateOverdueDetailsSheet(overdueDetailsSheet, allOverdueItems, forec
   }
 }
 
+/**
+ * Writes and formats the main headers for the dashboard tables.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
+ * @param {object} config The global configuration object.
+ * @returns {void}
+ */
 function setDashboardHeaders(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
   const DF = config.DASHBOARD_FORMATTING;
@@ -280,6 +322,13 @@ function setDashboardHeaders(sheet, config) {
   }
 }
 
+/**
+ * Hides the columns used for chart data staging to keep the UI clean.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
+ * @param {object} config The global configuration object.
+ * @returns {void}
+ */
 function hideDataColumns(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
   if (sheet.getMaxColumns() < DL.HIDE_COL_START) return;
@@ -287,6 +336,14 @@ function hideDataColumns(sheet, config) {
   sheet.hideColumns(DL.HIDE_COL_START, numColsToHide);
 }
 
+/**
+ * Ensures the sheet has enough columns for hidden chart data and hides them.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to modify.
+ * @param {number} startCol The starting column for the hidden data range.
+ * @param {number} columnsNeeded The number of columns required.
+ * @returns {void}
+ */
 function ensureHiddenColumnCapacity(sheet, startCol, columnsNeeded) {
   const requiredEndCol = startCol + columnsNeeded - 1;
   const currentMaxCol = sheet.getMaxColumns();
@@ -296,6 +353,13 @@ function ensureHiddenColumnCapacity(sheet, startCol, columnsNeeded) {
   sheet.hideColumns(startCol, columnsNeeded);
 }
 
+/**
+ * Ensures the sheet has at least a minimum number of rows.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to modify.
+ * @param {number} minRows The minimum number of rows required.
+ * @returns {void}
+ */
 function ensureRowCapacity(sheet, minRows) {
   const currentMaxRows = sheet.getMaxRows();
   if (currentMaxRows < minRows) {
@@ -303,6 +367,16 @@ function ensureRowCapacity(sheet, minRows) {
   }
 }
 
+/**
+ * Safely clears a block of cells, typically used for hidden chart data.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet containing the block.
+ * @param {number} startRow The starting row of the block to clear.
+ * @param {number} startCol The starting column of the block to clear.
+ * @param {number} numRows The number of rows in the block.
+ * @param {number} numCols The number of columns in the block.
+ * @returns {void}
+ */
 function clearHiddenBlock(sheet, startRow, startCol, numRows, numCols) {
   try {
     const maxRows = sheet.getMaxRows();
@@ -317,6 +391,14 @@ function clearHiddenBlock(sheet, startRow, startCol, numRows, numCols) {
   }
 }
 
+/**
+ * Retrieves a stored count from a cell (typically a hidden one).
+ * This is used to track the size of chart data ranges between updates.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet where the count is stored.
+ * @param {number} col The column containing the count (in row 1).
+ * @returns {number} The stored count, or 0 if not found or invalid.
+ */
 function getStoredCount(sheet, col) {
   try {
     var v = sheet.getRange(1, col).getValue();
@@ -325,12 +407,30 @@ function getStoredCount(sheet, col) {
   } catch (e) { return 0; }
 }
 
+/**
+ * Stores a count in a cell for later retrieval.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to store the count in.
+ * @param {number} col The column to use for storage (in row 1).
+ * @param {number} count The count to store.
+ * @returns {void}
+ */
 function setStoredCount(sheet, col, count) {
   try {
     sheet.getRange(1, col).setValue(count);
   } catch (e) { /* non fatal */ }
 }
 
+/**
+ * Creates or updates the summary charts on the dashboard.
+ * It removes existing charts, stages data in hidden columns, and then builds new charts.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
+ * @param {Date[]} months The list of month Date objects for the x-axis.
+ * @param {Array<Array<number>>} dashboardData The aggregated data for all months.
+ * @param {object} config The global configuration object.
+ * @returns {void}
+ */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
   sheet.getCharts().forEach(function(chart) { sheet.removeChart(chart); });
   const DC = config.DASHBOARD_CHARTING;
@@ -413,6 +513,12 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
   }
 }
 
+/**
+ * Normalizes a date to the beginning of its month (midnight on the 1st).
+ * @private
+ * @param {Date} d The date to normalize.
+ * @returns {Date} A new Date object set to the start of the month.
+ */
 function getMonthStart_(d) {
   var x = new Date(d);
   x.setDate(1);
@@ -420,6 +526,13 @@ function getMonthStart_(d) {
   return x;
 }
 
+/**
+ * Generates an array of Date objects, one for each month between a start and end date.
+ *
+ * @param {Date} startDate The first month to include in the list.
+ * @param {Date} endDate The last month to include in the list.
+ * @returns {Date[]} An array of Date objects, each representing the first day of a month.
+ */
 function generateMonthList(startDate, endDate) {
   const months = [];
   var current = new Date(startDate.getTime());
