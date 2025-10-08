@@ -140,12 +140,15 @@ function processDashboardData(forecastingValues, config) {
     const isComplete = (currentStatus === completedLower || currentStatus === cancelledLower);
     const isActive = (currentStatus === inProgressLower || currentStatus === scheduledLower);
 
-    if (isActive && !isComplete) {
-      if (deadlineDate >= today) {
-        monthData[1]++; // Upcoming
-      } else {
+    // If a project is not marked as complete or cancelled, evaluate its status.
+    if (!isComplete) {
+      // Any non-complete project with a deadline in the past is considered "Overdue".
+      if (deadlineDate < today) {
         monthData[2]++; // Overdue
         allOverdueItems.push(row);
+      // For projects with a future deadline, they are only "Upcoming" if they have an active status.
+      } else if (isActive) {
+        monthData[1]++; // Upcoming
       }
     }
 
