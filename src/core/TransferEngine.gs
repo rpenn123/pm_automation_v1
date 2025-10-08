@@ -126,7 +126,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
     const mapping = config.destinationColumnMapping || {};
     const maxMappedCol = getMaxValueInObject(mapping);
     // Determine the width of the new row
-    const destLastCol = Math.max(destinationSheet.getLastColumn(), maxMappedCol);
+    const destLastCol = Math.max(destinationSheet.getMaxColumns(), maxMappedCol);
     const newRow = new Array(destLastCol).fill(""); // Initialize with empty strings
 
     for (const sourceColStr in mapping) {
