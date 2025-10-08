@@ -83,9 +83,17 @@ The entire application is controlled by the `CONFIG` object in **`src/Config.gs`
 
 To modify the script's behavior, you will likely need to edit this file. Key areas include:
 -   `SHEETS`: The names of all sheets used in the automation.
--   `STATUS_STRINGS`: The text values for statuses that trigger actions (e.g., "In Progress", "approved").
+-   `STATUS_STRINGS`: The text values for statuses that trigger actions (e.g., "In Progress", "approved"). These now include
+    keys for `COMPLETED` and `CANCELLED` so you can align dashboard terminology with your team's language without digging into
+    business logic.
 -   `*_COLS`: The 1-indexed column numbers for all data fields in each sheet. If you add, remove, or move a column in your sheet, you **must** update the corresponding mapping here.
 -   `DASHBOARD_LAYOUT`: Defines the structure and appearance of the Dashboard sheet.
+
+### Dashboard setup notes
+
+The dashboard and automations both read directly from `CONFIG.STATUS_STRINGS`. If your sheet labels use different words for
+completed or cancelled work, update the `COMPLETED` and `CANCELLED` values there so the charts and aggregations stay in sync
+with on-sheet terminology.
 
 ## 5. Testing
 
