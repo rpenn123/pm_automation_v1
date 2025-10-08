@@ -142,12 +142,12 @@ function processDashboardData(forecastingValues, config) {
 
     // If a project is not marked as complete or cancelled, evaluate its status.
     if (!isComplete) {
-      // Any non-complete project with a deadline in the past is considered "Overdue".
-      if (deadlineDate < today) {
+      // An ACTIVE project with a deadline in the past is "Overdue".
+      if (deadlineDate < today && isActive) {
         monthData[2]++; // Overdue
         allOverdueItems.push(row);
-      // For projects with a future deadline, they are only "Upcoming" if they have an active status.
-      } else if (isActive) {
+      // An ACTIVE project with a deadline today or in the future is "Upcoming".
+      } else if (deadlineDate >= today && isActive) {
         monthData[1]++; // Upcoming
       }
     }
