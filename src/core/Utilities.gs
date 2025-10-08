@@ -126,9 +126,14 @@ function parseAndNormalizeDate(input) {
  * @returns {string} The formatted string, ready for use as a key.
  */
 function formatValueForKey(value) {
-  if (value instanceof Date && !isNaN(value.getTime())) {
-    return Utilities.formatDate(value, "UTC", "yyyy-MM-dd");
+  // First, try to parse the value as a date. This handles both actual Date objects
+  // and common date-string formats from the spreadsheet.
+  const parsedDate = parseAndNormalizeDate(value);
+  if (parsedDate) {
+    // If it's a valid date, format it consistently.
+    return Utilities.formatDate(parsedDate, "UTC", "yyyy-MM-dd");
   }
+  // If it's not a date, fall back to the standard string normalization.
   return (value !== null && value !== undefined) ? String(value).trim().toLowerCase() : "";
 }
 
