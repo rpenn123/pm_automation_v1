@@ -4,26 +4,20 @@ This document outlines the updated logic for calculating overdue projects and ho
 
 #### Overdue Project Definition
 
-A project from the **Forecasting** sheet is considered **Overdue** if it meets both of the following criteria:
+A project from the **Forecasting** sheet is considered **Overdue** if it meets **both** of the following criteria:
 
-1.  **Deadline:** The date in the `Deadline` column (J) is on or before today's date. The comparison is performed in the `America/New_York` timezone, normalizing both dates to midnight to ensure accuracy.
-2.  **Status:** The project's status in the `Progress` column (G) is **not** one of the following terminal or non-active statuses:
-    *   `Done`
-    *   `Canceled`
-    *   `On Hold`
-    *   `Stuck`
-    *   `Completed` (from config)
-    *   `Cancelled` (from config)
+1.  **Deadline:** The date in the `Deadline` column (J) is on or before today's date. The comparison is performed in the `America/New_York` timezone.
+2.  **Status:** The project's status in the `Progress` column (G) is **exactly** "In Progress".
 
-Projects with empty or invalid deadline cells are ignored.
+Projects with any other status (e.g., "Scheduled", "On Hold", "Done") are **not** counted as overdue, regardless of their deadline.
 
 #### Data Flow and Hover Notes
 
 The dashboard generation process is orchestrated by the `updateDashboard` function in `src/ui/Dashboard.gs` and follows these steps:
 
 1.  **Read Data:** The script reads all project data from the `Forecasting` sheet.
-2.  **Process Data:** The `processDashboardData` function iterates through each project, calculating monthly summaries for `Total`, `Upcoming`, `Overdue`, and `Approved` projects based on the rules defined in the script.
-3.  **Build Hover Notes:** During processing, if a project is identified as overdue, its name and deadline are collected. These details are grouped by month.
+2.  **Process Data:** The `processDashboardData` function iterates through each project, calculating monthly summaries based on the rules defined in the script.
+3.  **Build Hover Notes:** During processing, if a project is identified as overdue (meets the strict criteria above), its name and deadline are collected. These details are grouped by month.
 4.  **Render Table:** The `renderDashboardTable` function populates the main dashboard grid. For each month, it sets the overdue count in **Column E**. It then generates a hover note for that cell, containing a list of the contributing overdue projects (`Project Name — Deadline`). If a month has more than 20 overdue projects, the note will show the first 20 followed by a `(+N more)` line.
 5.  **Delete Old Sheet:** The script now programmatically deletes the "Overdue Details" sheet, as it has been fully replaced by the hover notes.
 

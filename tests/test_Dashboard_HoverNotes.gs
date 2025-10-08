@@ -118,8 +118,14 @@ function test_Dashboard_HoverNotes() {
     const noteCall = setNotesSpy.mock.calls[0][0];
     const generatedNote = noteCall.find(n => n[0] !== null);
 
-    if (!generatedNote || !generatedNote[0].includes("Project A") || !generatedNote[0].includes("Project B")) {
-        throw new Error("Assertion failed: Hover note did not contain the expected overdue projects.");
+    // Assert that only "Project A" is in the overdue note.
+    if (!generatedNote || !generatedNote[0].includes("Project A")) {
+        throw new Error("Assertion failed: Hover note did not contain the 'In Progress' overdue project.");
+    }
+
+    // Assert that "Project B" (Scheduled) is NOT in the overdue note.
+    if (generatedNote[0].includes("Project B")) {
+        throw new Error("Assertion failed: Hover note incorrectly included a 'Scheduled' project.");
     }
 
     if (generatedNote[0].includes("Project D")) {
