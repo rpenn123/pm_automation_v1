@@ -79,7 +79,7 @@ global.LockService = {
     }),
 };
 
-// Simple mock for jest.spyOn used in the new test
+// Simple mock for jest functions used in tests
 const jest = {
     spyOn: (obj, funcName) => {
         const originalFunc = obj[funcName];
@@ -95,6 +95,17 @@ const jest = {
             return originalFunc.apply(obj, args);
         };
         return mock;
+    },
+    fn: () => {
+        const mock = (...args) => {
+            mock.calls.push(args);
+            mock.mock.calls.push(args);
+        };
+        mock.calls = [];
+        mock.mock = {
+            calls: []
+        };
+        return mock;
     }
 };
 global.jest = jest;
@@ -108,7 +119,7 @@ global.jest = jest;
 const utilitiesGs = fs.readFileSync('src/core/Utilities.gs', 'utf8');
 let configGs = fs.readFileSync('src/Config.gs', 'utf8');
 let dashboardGs = fs.readFileSync('src/ui/Dashboard.gs', 'utf8');
-const lastEditServiceGs = fs.readFileSync('src/services/LastEditService.gs', 'utf8');
+let lastEditServiceGs = fs.readFileSync('src/services/LastEditService.gs', 'utf8');
 let loggerServiceGs = fs.readFileSync('src/services/LoggerService.gs', 'utf8');
 const automationsGs = fs.readFileSync('src/core/Automations.gs', 'utf8');
 let transferEngineGs = fs.readFileSync('src/core/TransferEngine.gs', 'utf8');
@@ -122,6 +133,7 @@ const dataLossTestGs = fs.readFileSync('tests/test_data_loss.gs', 'utf8');
 const auditTestGs = fs.readFileSync('tests/test_AuditLogging.gs', 'utf8');
 const hoverNotesTestGs = fs.readFileSync('tests/test_Dashboard_HoverNotes.gs', 'utf8');
 const transferEngineTestGs = fs.readFileSync('tests/test_TransferEngine.gs', 'utf8');
+const findRowByValueTestGs = fs.readFileSync('tests/test_findRowByValue.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
@@ -129,6 +141,8 @@ configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
 loggerServiceGs = loggerServiceGs.replace('function logAudit(', 'global.logAudit = function logAudit(');
 // Make readForecastingData global for mocking in tests
 dashboardGs = dashboardGs.replace('function readForecastingData(', 'global.readForecastingData = function readForecastingData(');
+// Make updateLastEditForRow global for mocking in tests
+lastEditServiceGs = lastEditServiceGs.replace('function updateLastEditForRow(', 'global.updateLastEditForRow = function updateLastEditForRow(');
 
 // Use 'eval' to make the functions available in the current scope.
 eval(utilitiesGs);
@@ -149,6 +163,7 @@ eval(dataLossTestGs);
 eval(auditTestGs);
 eval(hoverNotesTestGs);
 eval(transferEngineTestGs);
+eval(findRowByValueTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -172,6 +187,8 @@ try {
     test_Dashboard_HoverNotes();
     console.log("\n--- Running Transfer Engine tests ---");
     runTransferEngineTests();
+    console.log("\n--- Running findRowByValue tests ---");
+    runFindRowByValueTests();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);

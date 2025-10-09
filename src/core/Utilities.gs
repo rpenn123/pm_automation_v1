@@ -232,7 +232,7 @@ function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
  * @returns {number} The 1-based row index of the first match, or -1 if not found.
  */
 function findRowByValue(sheet, value, column) {
-  if (!sheet || !value || !column) return -1;
+  if (!sheet || value == null || !column) return -1;
 
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return -1;
