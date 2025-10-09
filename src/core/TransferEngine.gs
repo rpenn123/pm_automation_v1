@@ -203,6 +203,8 @@ function executeTransfer(e, config, preReadSourceRowData, correlationId) {
  * 1.  **SFID Check (Primary):** If a non-empty `sfid` is provided, it performs a fast, exact-match search on the destination SFID column.
  * 2.  **Compound Key Check (Fallback):** If no SFID is available, it constructs a unique key from the Project Name plus any additional columns
  *     defined in `compoundKeySourceCols`. This maintains compatibility with legacy data that may not have an SFID.
+ *     **Note on Bug Fix:** The compound key generation previously used `formatValueForKey`, which incorrectly treated date-like strings
+ *     as dates. It now uses `normalizeString` to ensure all parts of the key are compared as simple strings.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} destinationSheet The sheet object where duplicates will be checked.
  * @param {string|null} sfid The Salesforce ID from the source row. This is the preferred unique identifier.
@@ -245,10 +247,10 @@ function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRow
   }
 
   // 1. Build the fallback key to check against from the source data
-  let keyToCheck = formatValueForKey(projectName);
+  let keyToCheck = normalizeString(projectName);
   for (const pair of keyPairs) {
     const val = (pair.source <= sourceReadWidth) ? sourceRowData[pair.source - 1] : undefined;
-    keyToCheck += sep + formatValueForKey(val);
+    keyToCheck += sep + normalizeString(val);
   }
 
   // 2. Determine columns needed from the destination for comparison
@@ -275,14 +277,14 @@ function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRow
   // 4. Scan destination data for the key
   for (const row of vals) {
     if (projIdx >= row.length) continue;
-    let existingKey = formatValueForKey(row[projIdx]);
+    let existingKey = normalizeString(row[projIdx]);
     if (!existingKey) continue;
 
     // Build the key from the destination row using the same sorted order
     for (const pair of keyPairs) {
       const destColIndex = pair.dest - minCol;
       const v = (destColIndex < row.length) ? row[destColIndex] : "";
-      existingKey += sep + formatValueForKey(v);
+      existingKey += sep + normalizeString(v);
     }
 
     if (existingKey === keyToCheck) return true;
