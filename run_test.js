@@ -62,7 +62,8 @@ global.Utilities = {
     }
     return date.toString();
   },
-  sleep: (ms) => { /* no-op for tests */ }
+  sleep: (ms) => { /* no-op for tests */ },
+  getUuid: () => 'mock-uuid-' + Math.random().toString(36).substring(2)
 };
 
 global.Session = {
@@ -131,6 +132,7 @@ let configGs = fs.readFileSync('src/Config.gs', 'utf8');
 let dashboardGs = fs.readFileSync('src/ui/Dashboard.gs', 'utf8');
 let lastEditServiceGs = fs.readFileSync('src/services/LastEditService.gs', 'utf8');
 let loggerServiceGs = fs.readFileSync('src/services/LoggerService.gs', 'utf8');
+let errorServiceGs = fs.readFileSync('src/services/ErrorService.gs', 'utf8');
 const automationsGs = fs.readFileSync('src/core/Automations.gs', 'utf8');
 let transferEngineGs = fs.readFileSync('src/core/TransferEngine.gs', 'utf8');
 
@@ -144,6 +146,7 @@ const hoverNotesTestGs = fs.readFileSync('tests/test_Dashboard_HoverNotes.gs', '
 const transferEngineTestGs = fs.readFileSync('tests/test_TransferEngine.gs', 'utf8');
 const transferEngineSortTestGs = fs.readFileSync('tests/test_TransferEngine_Sort.gs', 'utf8');
 const findRowByValueTestGs = fs.readFileSync('tests/test_findRowByValue.gs', 'utf8');
+const errorHandlingTestGs = fs.readFileSync('tests/test_ErrorHandling.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
@@ -161,6 +164,7 @@ eval(configGs);
 eval(dashboardGs);
 eval(lastEditServiceGs);
 eval(loggerServiceGs);
+eval(errorServiceGs); // Must be loaded before other services that use it
 eval(automationsGs);
 transferEngineGs = transferEngineGs.replace('function executeTransfer(', 'global.executeTransfer = function executeTransfer(');
 transferEngineGs = transferEngineGs.replace('function isDuplicateInDestination(', 'global.isDuplicateInDestination = function isDuplicateInDestination(');
@@ -175,6 +179,7 @@ eval(hoverNotesTestGs);
 eval(transferEngineTestGs);
 eval(transferEngineSortTestGs);
 eval(findRowByValueTestGs);
+eval(errorHandlingTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -200,6 +205,8 @@ try {
     runTransferEngineSortTests();
     console.log("\n--- Running findRowByValue tests ---");
     runFindRowByValueTests();
+    console.log("\n--- Running Error Handling tests ---");
+    runErrorHandlingTests();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);

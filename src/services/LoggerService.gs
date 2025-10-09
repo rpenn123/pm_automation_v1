@@ -78,22 +78,26 @@ function notifyError(subjectDetails, error, ss, config) {
     });
     Logger.log(`Sent error email to ${email}`);
   } catch (mailError) {
-    Logger.log(`CRITICAL: Failed to send error email: ${mailError}`);
+    // If sending the email fails, we now use the centralized handler.
+    handleError(new DependencyError("Failed to send error notification email.", mailError), {
+      correlationId: "N/A",
+      functionName: "notifyError",
+      spreadsheet: ss
+    }, config);
   }
 }
 
 /**
- * Retrieves, creates, or falls back to the designated log spreadsheet.
- * The function follows a resilient multi-step process:
- * 1. Tries to open the spreadsheet using an ID stored in Script Properties.
- * 2. If that fails, it attempts to create a new spreadsheet in the user's Drive.
- * 3. If creation also fails (e.g., due to insufficient permissions), it defaults to using the currently active spreadsheet as a last resort.
- * This ensures that logging can always proceed, even if the primary log sheet is unavailable.
+ * Retrieves or creates the designated log spreadsheet.
+ * This function is resilient, attempting to open by ID, then create, but will throw
+ * a `DependencyError` if it cannot secure a log spreadsheet, removing the fallback to the active sheet.
  *
  * @param {object} config The global configuration object (`CONFIG`).
+ * @param {string} correlationId The correlation ID for tracing.
  * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet} The log spreadsheet object.
+ * @throws {DependencyError} If the log spreadsheet cannot be opened or created.
  */
-function getOrCreateLogSpreadsheet(config) {
+function getOrCreateLogSpreadsheet(config, correlationId) {
   const props = PropertiesService.getScriptProperties();
   const storedId = props.getProperty(config.LOGGING.SPREADSHEET_ID_PROP);
 
@@ -102,36 +106,29 @@ function getOrCreateLogSpreadsheet(config) {
     try {
       return SpreadsheetApp.openById(storedId);
     } catch (e) {
-      Logger.log(`Stored log spreadsheet ID invalid or inaccessible: ${e}`);
-      // fall through
+      // The stored ID is bad, log this but continue to try creating a new one.
+      handleError(new DependencyError(`Stored log spreadsheet ID '${storedId}' is invalid or inaccessible.`, e), {
+        correlationId: correlationId,
+        functionName: "getOrCreateLogSpreadsheet"
+      }, config);
     }
   }
 
-  // 2. Try creating a new external log spreadsheet (requires Drive/Sheets scopes).
+  // 2. Try creating a new external log spreadsheet.
   try {
     const newSS = SpreadsheetApp.create(config.LOGGING.SPREADSHEET_NAME);
     props.setProperty(config.LOGGING.SPREADSHEET_ID_PROP, newSS.getId());
     return newSS;
   } catch (e2) {
-    // 3. Fallback: use the active workbook.
-    const active = SpreadsheetApp.getActiveSpreadsheet();
-    try {
-      // Notify about the fallback, but don't let notification failure stop the process.
-      // Use a property to prevent spamming notifications on every log attempt if fallback is active.
-      if (!props.getProperty("FALLBACK_ACTIVE_NOTIFIED")) {
-         notifyError("Could not create external log workbook. Falling back to internal logging.", e2, active, config);
-         props.setProperty("FALLBACK_ACTIVE_NOTIFIED", "true");
-      }
-    } catch (ignore) {}
-    Logger.log("FALLBACK: Using active spreadsheet for monthly logs.");
-    return active;
+    // If creation fails, this is a critical, unrecoverable error for logging.
+    throw new DependencyError("Failed to create a new log spreadsheet.", e2);
   }
 }
 
 /**
  * Ensures that a sheet for the specified month exists in the log spreadsheet.
- * If the sheet doesn't exist, it creates and formats it with a frozen header row.
- * Sheet names are based on a standardized "YYYY-MM" key to ensure chronological sorting.
+ * If the sheet doesn't exist, it creates and formats it with a frozen header row,
+ * now including a `CorrelationId` column for traceability.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} logSS The spreadsheet where logs are stored.
  * @param {string} [monthKey] The month key to use (e.g., "2024-07"). Defaults to the current month if not provided.
@@ -143,9 +140,9 @@ function ensureMonthlyLogSheet(logSS, monthKey) {
   let sh = logSS.getSheetByName(key);
   if (!sh) {
     sh = logSS.insertSheet(key);
-    // Set headers and freeze the first row
-    sh.getRange(1, 1, 1, 11).setValues([[
-      "Timestamp", "User", "Action",
+    // Set headers and freeze the first row, now with CorrelationId.
+    sh.getRange(1, 1, 1, 12).setValues([[
+      "Timestamp", "CorrelationId", "User", "Action",
       "SourceSpreadsheetName", "SourceSpreadsheetId",
       "SourceSheet", "SourceRow", "ProjectName",
       "Details", "Result", "ErrorMessage"
@@ -157,12 +154,12 @@ function ensureMonthlyLogSheet(logSS, monthKey) {
 
 /**
  * Writes a detailed audit entry to the appropriate monthly log sheet.
- * This function orchestrates getting the log spreadsheet, ensuring the correct monthly sheet exists,
- * and appending a new row with the provided audit information. The log sheet is then sorted to
- * keep the latest entries at the top.
+ * This function now requires a `correlationId` and includes it in the log entry,
+ * enhancing traceability across all logged actions.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} sourceSS The spreadsheet where the audited action occurred.
  * @param {object} entry An object containing the details of the log entry.
+ * @param {string} entry.correlationId A unique ID to trace the entire operation.
  * @param {string} entry.action The name of the action being logged (e.g., "SyncFtoU").
  * @param {string} [entry.sourceSheet] The name of the sheet where the action was initiated.
  * @param {number} [entry.sourceRow] The row number related to the action.
@@ -174,14 +171,20 @@ function ensureMonthlyLogSheet(logSS, monthKey) {
  * @returns {void} This function does not return a value.
  */
 function logAudit(sourceSS, entry, config) {
+  if (!entry.correlationId) {
+    // Enforce correlationId for traceability.
+    Logger.log("CRITICAL: logAudit called without a correlationId. Entry: " + JSON.stringify(entry));
+    return;
+  }
+
   try {
-    const logSS = getOrCreateLogSpreadsheet(config);
+    const logSS = getOrCreateLogSpreadsheet(config, entry.correlationId);
     const sheet = ensureMonthlyLogSheet(logSS);
-    // Safely get the active user's email (requires authorization scope)
     const user = Session.getActiveUser() ? Session.getActiveUser().getEmail() : "unknown";
 
     const newRow = [
       new Date(),
+      entry.correlationId,
       user,
       entry.action || "",
       (sourceSS && sourceSS.getName) ? sourceSS.getName() : "",
@@ -194,20 +197,19 @@ function logAudit(sourceSS, entry, config) {
       entry.errorMessage || ""
     ];
 
-    // Append row efficiently
     sheet.appendRow(newRow);
 
-    // Sort the sheet to keep the newest entries at the top
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) { // Check if there is data to sort (beyond the header)
-      const range = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn());
-      range.sort({ column: 1, ascending: false }); // Sort by timestamp descending
-    }
+    // Sorting is now handled by a separate trigger to reduce latency in the main execution path.
+    // See `sortLogSheetsOnOpen`.
 
   } catch (e) {
-    Logger.log(`CRITICAL: Audit logging failure: ${e}`);
-    // If the logging system itself fails, attempt to notify.
-    notifyError("Audit logging system failed critically", e, sourceSS, config);
+    // If the logging system itself fails, use the centralized handler.
+    handleError(new DependencyError("Audit logging system failed critically.", e), {
+      correlationId: entry.correlationId,
+      functionName: "logAudit",
+      spreadsheet: sourceSS,
+      extra: { originalEntry: entry }
+    }, config);
   }
 }
 

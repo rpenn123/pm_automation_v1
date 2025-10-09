@@ -36,35 +36,29 @@
  * @param {number} [config.postTransferActions.sortColumn] The 1-based column index to sort by.
  * @param {boolean} [config.postTransferActions.sortAscending] If `true`, sorts in ascending order; otherwise, descending.
  * @param {any[]} [preReadSourceRowData] Optional. The pre-read data from the source row to avoid another I/O call. If not provided, the function will read it.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  * @returns {void} This function does not return a value.
  */
-function executeTransfer(e, config, preReadSourceRowData) {
+function executeTransfer(e, config, preReadSourceRowData, correlationId) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
   let appendedRow = -1;
   const sourceSheet = e.range.getSheet();
   const editedRow = e.range.getRow();
   const ss = e.source;
-  let projectName = ""; // Initialize early for use in error logging if possible
+  let projectName = ""; // Initialize early for use in error logging
 
   try {
-    // Attempt to acquire lock to prevent concurrent executions during data transfer
-    lockAcquired = lock.tryLock(2500); // Slightly longer lock for transfers
-    if (!lockAcquired) {
-      Logger.log(`${config.transferName}: Lock not acquired. Skipping.`);
-      logAudit(ss, {
-        action: config.transferName,
-        sourceSheet: sourceSheet.getName(),
-        sourceRow: editedRow,
-        result: "skipped-no-lock"
-      }, CONFIG);
-      return;
-    }
+    // Attempt to acquire lock with retry logic. Throws TransientError on failure.
+    withRetry(() => {
+      lockAcquired = lock.tryLock(2500);
+      if (!lockAcquired) throw new Error("Lock not acquired within the time limit.");
+    }, { functionName: `${config.transferName}:acquireLock`, maxRetries: 2, initialDelayMs: 500 });
 
     // Validate destination sheet
     const destinationSheet = ss.getSheetByName(config.destinationSheetName);
     if (!destinationSheet) {
-      throw new Error(`Destination sheet "${config.destinationSheetName}" not found`);
+      throw new ConfigurationError(`Destination sheet "${config.destinationSheetName}" not found`);
     }
 
     // Read source data efficiently, or use pre-read data if available
@@ -79,8 +73,12 @@ function executeTransfer(e, config, preReadSourceRowData) {
       const maxSourceColNeeded = Math.max(...(config.sourceColumnsNeeded || []), ...mappedSourceCols, ...compoundKeyCols);
       const actualLastSourceCol = sourceSheet.getMaxColumns();
       readWidth = Math.min(maxSourceColNeeded, actualLastSourceCol);
-      // Read the necessary part of the row in a single batch
-      sourceRowData = sourceSheet.getRange(editedRow, 1, 1, readWidth).getValues()[0];
+
+      // Read the necessary part of the row in a single batch, with retry
+      sourceRowData = withRetry(
+        () => sourceSheet.getRange(editedRow, 1, 1, readWidth).getValues()[0],
+        { functionName: `${config.transferName}:readSourceRow` }
+      );
     }
 
     // Identify SFID and Project Name for logging and duplicate checks
@@ -90,84 +88,80 @@ function executeTransfer(e, config, preReadSourceRowData) {
     sfid = sfid ? String(sfid).trim() : null;
     projectName = projectName ? String(projectName).trim() : "";
     
-    // A record must have at least an SFID or a Project Name to be processed
+    // A record must have at least an SFID or a Project Name to be processed. Throws ValidationError on failure.
     if (!sfid && !projectName) {
-      Logger.log(`${config.transferName}: Skipping row ${editedRow}; missing both SFID and Project Name.`);
-      logAudit(ss, {
-        action: config.transferName,
-        sourceSheet: sourceSheet.getName(),
-        sourceRow: editedRow,
-        details: "Missing both SFID and Project Name",
-        result: "skipped"
-      }, CONFIG);
-      return;
+      throw new ValidationError(`Row ${editedRow} is missing both SFID and Project Name.`);
     }
 
     // Perform Duplicate Check
     if (config.duplicateCheckConfig && config.duplicateCheckConfig.checkEnabled !== false) {
-      if (isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRowData, readWidth, config.duplicateCheckConfig)) {
+      if (isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRowData, readWidth, config.duplicateCheckConfig, correlationId)) {
         const logIdentifier = sfid ? `SFID ${sfid}` : `project "${projectName}"`;
-        Logger.log(`${config.transferName}: Duplicate detected for ${logIdentifier}.`);
         logAudit(ss, {
+          correlationId: correlationId,
           action: config.transferName,
           sourceSheet: sourceSheet.getName(),
           sourceRow: editedRow,
           sfid: sfid,
           projectName: projectName,
-          details: "Duplicate",
+          details: `Duplicate detected for ${logIdentifier}.`,
           result: "skipped-duplicate"
         }, CONFIG);
-        return;
+        return; // This is an expected outcome, not an error.
       }
     }
 
     // Build the destination row
     const mapping = config.destinationColumnMapping || {};
     const maxMappedCol = getMaxValueInObject(mapping);
-    // Determine the width of the new row
     const destLastCol = Math.max(destinationSheet.getMaxColumns(), maxMappedCol);
-    const newRow = new Array(destLastCol).fill(""); // Initialize with empty strings
+    const newRow = new Array(destLastCol).fill("");
 
     for (const sourceColStr in mapping) {
       if (!Object.prototype.hasOwnProperty.call(mapping, sourceColStr)) continue;
       
-      const sourceCol = Number(sourceColStr); // 1-indexed
-      const destCol = mapping[sourceColStr];  // 1-indexed
+      const sourceCol = Number(sourceColStr);
+      const destCol = mapping[sourceColStr];
 
       if (sourceCol <= readWidth) {
-        // Access source array 0-indexed, place in destination array 0-indexed
         const value = sourceRowData[sourceCol - 1]; 
         newRow[destCol - 1] = (value !== null && value !== undefined) ? value : "";
       } else {
-        Logger.log(`${config.transferName}: Warning: Source col ${sourceCol} not available in read data. Skipped mapping.`);
+        // This is a configuration issue, but may not be critical. Log as a warning.
+        handleError(new ConfigurationError(`Source col ${sourceCol} not available in read data. Skipped mapping.`), {
+            correlationId, functionName: "executeTransfer", spreadsheet: ss,
+            extra: { transferName: config.transferName, sourceSheet: sourceSheet.getName(), editedRow }
+        }, CONFIG);
       }
     }
 
-    // Append the row
-    destinationSheet.appendRow(newRow);
+    // Append the row, with retry
+    withRetry(() => destinationSheet.appendRow(newRow), { functionName: `${config.transferName}:appendRow` });
     appendedRow = destinationSheet.getLastRow();
     
-    // Update Last Edit tracking on the destination sheet if applicable
+    // Update Last Edit tracking
     if (config.lastEditTrackedSheets && config.lastEditTrackedSheets.includes(config.destinationSheetName)) {
         updateLastEditForRow(destinationSheet, appendedRow, CONFIG);
     }
 
     // Post Transfer Actions (e.g., Sorting)
     if (config.postTransferActions && config.postTransferActions.sort && appendedRow > 2) {
-      SpreadsheetApp.flush(); // Ensure data is written before sorting
       try {
+        withRetry(() => SpreadsheetApp.flush(), { functionName: 'SpreadsheetApp.flush' });
         const { sortColumn, sortAscending } = config.postTransferActions;
-        // Get range excluding the header
         const range = destinationSheet.getRange(2, 1, appendedRow - 1, destinationSheet.getMaxColumns());
-        range.sort({ column: sortColumn, ascending: !!sortAscending });
+        withRetry(() => range.sort({ column: sortColumn, ascending: !!sortAscending }), { functionName: `${config.transferName}:sortDestination` });
       } catch (sortError) {
-        // Notify about sort failure, but the transfer itself succeeded
-        notifyError(`${config.transferName} completed, but sorting failed`, sortError, ss, CONFIG);
+        handleError(new DependencyError(`${config.transferName} completed, but post-transfer sort failed.`, sortError), {
+            correlationId, functionName: "executeTransfer:postTransferSort", spreadsheet: ss,
+            extra: { transferName: config.transferName }
+        }, CONFIG);
       }
     }
 
     // Success Logging
     logAudit(ss, {
+      correlationId: correlationId,
       action: config.transferName,
       sourceSheet: sourceSheet.getName(),
       sourceRow: editedRow,
@@ -177,16 +171,25 @@ function executeTransfer(e, config, preReadSourceRowData) {
     }, CONFIG);
 
   } catch (error) {
-    Logger.log(`${config.transferName} Error: ${error}\n${error.stack}`);
-    notifyError(`${config.transferName} failed`, error, ss, CONFIG);
+    // Centralized error handling
+    handleError(error, {
+        correlationId,
+        functionName: "executeTransfer",
+        spreadsheet: ss,
+        extra: { transferName: config.transferName, sourceSheet: sourceSheet.getName(), editedRow, projectName }
+    }, CONFIG);
+
+    // Audit the failure
     logAudit(ss, {
+      correlationId: correlationId,
       action: config.transferName,
       sourceSheet: sourceSheet.getName(),
       sourceRow: editedRow,
-      projectName: projectName, // Use the initialized project name if available
+      projectName: projectName,
       result: "error",
-      errorMessage: String(error)
+      errorMessage: `${error.name}: ${error.message}`
     }, CONFIG);
+
   } finally {
     // Ensure the lock is always released
     if (lockAcquired) lock.releaseLock();
@@ -206,25 +209,23 @@ function executeTransfer(e, config, preReadSourceRowData) {
  * @param {any[]} sourceRowData The array of values from the source row, used to build the compound key.
  * @param {number} sourceReadWidth The number of columns that were read from the source row.
  * @param {object} dupConfig The configuration object for the duplicate check, passed from `executeTransfer`.
- * @param {number} [dupConfig.sfidDestCol] The 1-based column index for SFIDs in the destination sheet. Required for SFID check.
- * @param {number} dupConfig.projectNameDestCol The 1-based column index for project names in the destination sheet.
- * @param {number[]} [dupConfig.compoundKeySourceCols] An array of 1-based source column indices to build a compound key.
- * @param {number[]} [dupConfig.compoundKeyDestCols] The corresponding destination column indices for the compound key.
- * @param {string} [dupConfig.keySeparator="|"] The separator used when concatenating values for the compound key.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  * @returns {boolean} Returns `true` if a duplicate is found, otherwise `false`.
+ * @throws {ConfigurationError} If the configuration for the duplicate check is invalid (e.g., missing columns).
  */
-function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRowData, sourceReadWidth, dupConfig) {
+function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRowData, sourceReadWidth, dupConfig, correlationId) {
   // Strategy 1: SFID is the primary, definitive check.
   if (sfid && dupConfig.sfidDestCol) {
-    // Use the efficient, exact-match lookup utility. A match here is a definitive duplicate.
-    return findRowByValue(destinationSheet, sfid, dupConfig.sfidDestCol) !== -1;
+    const foundRow = withRetry(() => findRowByValue(destinationSheet, sfid, dupConfig.sfidDestCol), {
+      functionName: "isDuplicateInDestination:findRowByValue",
+      correlationId: correlationId
+    });
+    return foundRow !== -1;
   }
 
   // Strategy 2: Fallback to Project Name + Compound Key if no SFID is present.
-  // This maintains backward compatibility with legacy data.
   if (!projectName) {
-    // Cannot perform fallback check without a project name.
-    return false;
+    return false; // Cannot perform fallback check without a project name.
   }
 
   const destProjectNameCol = dupConfig.projectNameDestCol;
@@ -259,18 +260,21 @@ function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRow
   const readWidth = maxCol - minCol + 1;
 
   if (maxCol > destinationSheet.getMaxColumns()) {
-    Logger.log("Duplicate check warning: destination sheet missing expected columns for compound key. Check may be incomplete.");
+    throw new ConfigurationError("Duplicate check failed: destination sheet missing expected columns for compound key.");
   }
 
-  // 3. Read destination data in a batch
-  const range = destinationSheet.getRange(2, minCol, lastDestRow - 1, readWidth);
-  const vals = range.getValues();
-  const projIdx = destProjectNameCol - minCol; // Relative index for project name
+  // 3. Read destination data in a batch, with retry
+  const vals = withRetry(() => destinationSheet.getRange(2, minCol, lastDestRow - 1, readWidth).getValues(), {
+    functionName: "isDuplicateInDestination:readDestinationData",
+    correlationId: correlationId
+  });
+
+  const projIdx = destProjectNameCol - minCol;
 
   // 4. Scan destination data for the key
   for (const row of vals) {
     if (projIdx >= row.length) continue;
-    let existingKey = formatValueForKey(row[projIdx]); // Use consistent formatting
+    let existingKey = formatValueForKey(row[projIdx]);
     if (!existingKey) continue;
 
     // Build the key from the destination row using the same sorted order

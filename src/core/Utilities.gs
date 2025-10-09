@@ -173,13 +173,19 @@ function getMonthKeyPadded(d) {
  * @returns {number} The 1-based column index of the header, or `-1` if not found.
  */
 function getHeaderColumnIndex(sheet, headerText) {
+  if (!sheet || !headerText) {
+    throw new ValidationError("getHeaderColumnIndex requires a valid sheet and headerText.");
+  }
   const lastCol = sheet.getMaxColumns();
   if (lastCol < 1) return -1;
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v).trim());
+
+  const headers = withRetry(() => {
+    return sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v).trim());
+  }, { functionName: "getHeaderColumnIndex:readHeaders" });
   
   const normalizedTarget = headerText.toLowerCase();
   for (let i = 0; i < headers.length; i++) {
-    if (headers[i].toLowerCase() === normalizedTarget) return i + 1; // Return 1-based index
+    if (headers[i].toLowerCase() === normalizedTarget) return i + 1;
   }
   return -1;
 }
@@ -187,65 +193,67 @@ function getHeaderColumnIndex(sheet, headerText) {
 /**
  * Performs a robust, case-insensitive search for a project by name and returns its 1-based row index.
  * This function uses a row-by-row scan that normalizes both the search term and the sheet values using `formatValueForKey`.
- * This ensures that comparisons are consistent with the duplicate checker and correctly handle values that might look like dates (e.g., "10/25/2024").
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search.
  * @param {string} projectName The name of the project to find.
  * @param {number} projectNameCol The 1-based column index where project names are stored.
  * @returns {number} The 1-based row index of the project, or `-1` if not found.
+ * @throws {ValidationError} If input parameters are invalid.
+ * @throws {DependencyError} If reading from the sheet fails after retries.
  */
 function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
-  if (!sheet || !projectName || typeof projectName !== "string" || !projectNameCol) return -1;
+  if (!sheet || !projectName || typeof projectName !== "string" || !projectNameCol) {
+    throw new ValidationError("findRowByProjectNameRobust requires a valid sheet, projectName, and projectNameCol.");
+  }
   const searchNameTrimmed = projectName.trim();
   if (!searchNameTrimmed) return -1;
 
-  try {
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return -1;
-    const range = sheet.getRange(2, projectNameCol, lastRow - 1, 1);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return -1;
 
-    const vals = range.getValues();
-    // Use formatValueForKey to handle dates and other types consistently.
-    const targetKey = formatValueForKey(searchNameTrimmed);
-    for (let i = 0; i < vals.length; i++) {
-      const v = vals[i][0];
-      // By using the same key format, we can correctly compare strings to Date objects.
-      if (v && formatValueForKey(v) === targetKey) {
-        return i + 2; // +2 for 0-index and header row
-      }
+  const vals = withRetry(() => {
+    return sheet.getRange(2, projectNameCol, lastRow - 1, 1).getValues();
+  }, { functionName: "findRowByProjectNameRobust:readColumn" });
+
+  const targetKey = formatValueForKey(searchNameTrimmed);
+  for (let i = 0; i < vals.length; i++) {
+    const v = vals[i][0];
+    if (v && formatValueForKey(v) === targetKey) {
+      return i + 2;
     }
-    return -1;
-  } catch (error) {
-    Logger.log(`findRowByProjectNameRobust error on "${sheet.getName()}": ${error}`);
-    notifyError(`Robust lookup failed for "${projectName}" in "${sheet.getName()}"`, error, sheet.getParent() || SpreadsheetApp.getActiveSpreadsheet());
-    return -1;
   }
+  return -1;
 }
 
 
 /**
  * Finds a row by an exact, case-sensitive match for a value in a specific column.
- * This function is optimized for looking up unique identifiers like a Salesforce ID (SFID) where an exact, case-sensitive match is required.
- * It trims whitespace from both the search value and the sheet values before comparison.
+ * This function is optimized for looking up unique identifiers like a Salesforce ID (SFID).
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search.
- * @param {any} value The exact value to find. Must not be null, undefined, or an empty string.
+ * @param {any} value The exact value to find.
  * @param {number} column The 1-based column index to search within.
  * @returns {number} The 1-based row index of the first match, or `-1` if not found.
+ * @throws {ValidationError} If input parameters are invalid.
+ * @throws {DependencyError} If reading from the sheet fails after retries.
  */
 function findRowByValue(sheet, value, column) {
-  if (!sheet || value == null || !column) return -1;
+  if (!sheet || value == null || !column) {
+    throw new ValidationError("findRowByValue requires a valid sheet, value, and column.");
+  }
 
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return -1;
 
-  const values = sheet.getRange(2, column, lastRow - 1, 1).getValues();
+  const values = withRetry(() => {
+    return sheet.getRange(2, column, lastRow - 1, 1).getValues();
+  }, { functionName: "findRowByValue:readColumn" });
+
   const searchValue = String(value).trim();
 
   for (let i = 0; i < values.length; i++) {
-    // Trim the sheet value to make the comparison robust against whitespace.
     if (String(values[i][0]).trim() === searchValue) {
-      return i + 2; // +2 adjustment: 0-indexed loop variable + data starts on row 2
+      return i + 2;
     }
   }
   return -1;
@@ -253,8 +261,6 @@ function findRowByValue(sheet, value, column) {
 
 /**
  * Implements an "SFID-first" lookup strategy to find a row in a sheet.
- * It first tries to find a match using the `sfid`. If no `sfid` is provided or if no match is found,
- * it falls back to searching by `projectName` for backward compatibility with legacy data.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search in.
  * @param {string} sfid The Salesforce ID to search for. Can be null or empty.
@@ -262,61 +268,74 @@ function findRowByValue(sheet, value, column) {
  * @param {string} projectName The project name to use as a fallback identifier.
  * @param {number} projectNameCol The 1-based column index for project names.
  * @returns {number} The 1-based row index of the matched row, or `-1` if not found.
+ * @throws {ValidationError} If input parameters are invalid.
  */
 function findRowByBestIdentifier(sheet, sfid, sfidCol, projectName, projectNameCol) {
+  if (!sheet || !sfidCol || !projectNameCol) {
+    throw new ValidationError("findRowByBestIdentifier requires a valid sheet and column indices.");
+  }
   if (sfid) {
     const row = findRowByValue(sheet, sfid, sfidCol);
     if (row !== -1) {
-      return row; // Found a definitive match by SFID.
+      return row;
     }
   }
-  return findRowByProjectNameRobust(sheet, projectName, projectNameCol);
+  if (projectName) {
+    return findRowByProjectNameRobust(sheet, projectName, projectNameCol);
+  }
+  return -1;
 }
 
 /**
  * Gets a sheet by its name. If the sheet does not exist, it creates and returns it.
- * This is a convenient idempotent operation used throughout the script to ensure target sheets always exist.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
  * @param {string} sheetName The name of the sheet to get or create.
  * @returns {GoogleAppsScript.Spreadsheet.Sheet} The existing or newly created sheet object.
+ * @throws {ValidationError} If input parameters are invalid.
+ * @throws {DependencyError} If creating the sheet fails after retries.
  */
 function getOrCreateSheet(ss, sheetName) {
+  if (!ss || !sheetName) {
+    throw new ValidationError("getOrCreateSheet requires a valid spreadsheet and sheetName.");
+  }
   let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) sheet = ss.insertSheet(sheetName);
+  if (!sheet) {
+    sheet = withRetry(() => ss.insertSheet(sheetName), { functionName: "getOrCreateSheet:insertSheet" });
+  }
   return sheet;
 }
 
 /**
  * Clears and resizes a sheet to a fixed number of rows and (optionally) columns.
- * This is crucial for maintaining a consistent layout on report sheets like the Dashboard,
- * preventing them from growing or shrinking unexpectedly.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to prepare.
  * @param {number} requiredRowCount The exact number of rows the sheet must have.
  * @param {number} [requiredColCount] Optional. The exact number of columns the sheet must have.
  * @returns {void} This function does not return a value.
+ * @throws {ValidationError} If input parameters are invalid.
+ * @throws {DependencyError} If any sheet modification fails after retries.
  */
 function clearAndResizeSheet(sheet, requiredRowCount, requiredColCount) {
   if (!sheet || typeof requiredRowCount !== 'number' || requiredRowCount < 1) {
-    throw new Error("Invalid parameters provided to clearAndResizeSheet.");
+    throw new ValidationError("Invalid parameters provided to clearAndResizeSheet.");
   }
 
-  sheet.clear();
+  withRetry(() => sheet.clear(), { functionName: "clearAndResizeSheet:clear" });
 
   const maxRows = sheet.getMaxRows();
   if (maxRows < requiredRowCount) {
-    sheet.insertRowsAfter(maxRows, requiredRowCount - maxRows);
+    withRetry(() => sheet.insertRowsAfter(maxRows, requiredRowCount - maxRows), { functionName: "clearAndResizeSheet:insertRows" });
   } else if (maxRows > requiredRowCount) {
-    sheet.deleteRows(requiredRowCount + 1, maxRows - requiredRowCount);
+    withRetry(() => sheet.deleteRows(requiredRowCount + 1, maxRows - requiredRowCount), { functionName: "clearAndResizeSheet:deleteRows" });
   }
 
   if (typeof requiredColCount === 'number' && requiredColCount > 0) {
     const maxCols = sheet.getMaxColumns();
     if (maxCols < requiredColCount) {
-      sheet.insertColumnsAfter(maxCols, requiredColCount - maxCols);
+      withRetry(() => sheet.insertColumnsAfter(maxCols, requiredColCount - maxCols), { functionName: "clearAndResizeSheet:insertCols" });
     } else if (maxCols > requiredColCount) {
-      sheet.deleteColumns(requiredColCount + 1, maxCols - requiredColCount);
+      withRetry(() => sheet.deleteColumns(requiredColCount + 1, maxCols - requiredColCount), { functionName: "clearAndResizeSheet:deleteCols" });
     }
   }
 }
@@ -369,36 +388,4 @@ function getMaxValueInObject(obj) {
  */
 function uniqueArray(arr) {
   return [...new Set(arr)];
-}
-
-// =================================================================
-// ==================== LOCKING UTILITIES ==========================
-// =================================================================
-
-/**
- * Attempts to acquire a script lock with a retry mechanism, making it more resilient to brief contention.
- * If the lock cannot be acquired immediately, it will wait and try again.
- *
- * @param {GoogleAppsScript.Lock.Lock} lock The `LockService` lock object to acquire.
- * @param {number} [maxRetries=3] The maximum number of times to attempt acquiring the lock.
- * @param {number} [delayMs=1000] The delay in milliseconds between retry attempts.
- * @returns {boolean} Returns `true` if the lock was acquired, `false` otherwise.
- */
-function acquireLockWithRetry(lock, maxRetries, delayMs) {
-  const retries = maxRetries === undefined ? 3 : maxRetries;
-  const delay = delayMs === undefined ? 1000 : delayMs;
-
-  for (let i = 0; i < retries; i++) {
-    // Try to acquire the lock, waiting up to 100ms.
-    if (lock.tryLock(100)) {
-      return true;
-    }
-    // If this wasn't the last attempt, wait before retrying.
-    if (i < retries - 1) {
-      Utilities.sleep(delay);
-    }
-  }
-
-  // If the loop completes without acquiring the lock, return false.
-  return false;
 }
