@@ -106,11 +106,9 @@ function getOrCreateLogSpreadsheet(config, correlationId) {
     try {
       return SpreadsheetApp.openById(storedId);
     } catch (e) {
-      // The stored ID is bad, log this but continue to try creating a new one.
-      handleError(new DependencyError(`Stored log spreadsheet ID '${storedId}' is invalid or inaccessible.`, e), {
-        correlationId: correlationId,
-        functionName: "getOrCreateLogSpreadsheet"
-      }, config);
+      // The stored ID is invalid. Log this as a warning, clear the property, and proceed to create a new one.
+      Logger.log(`Stored log spreadsheet ID '${storedId}' is invalid or inaccessible. A new log sheet will be created. Error: ${e.message}`);
+      props.deleteProperty(config.LOGGING.SPREADSHEET_ID_PROP);
     }
   }
 
