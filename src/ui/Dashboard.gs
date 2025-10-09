@@ -1,18 +1,26 @@
 /**
  * @OnlyCurrentDoc
- * Dashboard.gs
- * Generates the main dashboard: data processing, table rendering, charts, and overdue drill-down.
- * Design goals: correctness, idempotence, performance, and clean UX.
  *
- * Version History:
- * V1.5.0 - 2025-10-07 - Expert GAS Architect
- *    - Final syntax correction to resolve clasp push error.
- * V1.4.0 - 2025-10-07 - Expert GAS Architect
- *    - Definitive merge to resolve all conflicts between branches.
+ * Dashboard.gs
+ *
+ * This script generates the main dashboard, which includes data processing, table rendering, charts,
+ * and an overdue items drill-down. The design focuses on correctness, idempotence, performance, and a clean user experience.
+ *
+ * @version 1.5.1
+ * @release 2024-07-29
  */
 
 /**
- * Main orchestrator to generate or update the Dashboard.
+ * The main orchestrator function to generate or update the Dashboard sheet.
+ * It follows a comprehensive sequence:
+ * 1. Reads data from the 'Forecasting' sheet.
+ * 2. Processes the data to calculate monthly summaries and identify overdue items.
+ * 3. Renders the main data table, including grand totals and hover notes for overdue items.
+ * 4. Creates or updates summary charts if enabled in the configuration.
+ * 5. Hides temporary data columns to maintain a clean UI.
+ * It includes robust error handling and logging throughout the process.
+ *
+ * @returns {void} This function does not return a value.
  */
 function updateDashboard() {
   const ui = SpreadsheetApp.getUi();
@@ -77,7 +85,13 @@ function updateDashboard() {
 }
 
 /**
- * Efficient read of the Forecasting sheet.
+ * Efficiently reads the necessary data from the 'Forecasting' sheet.
+ * It reads only the columns required for dashboard processing, as defined in the configuration,
+ * to optimize performance on large sheets.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} forecastSheet The sheet object for the 'Forecasting' sheet.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {{forecastingValues: any[][], forecastingHeaders: string[]}|null} An object containing the data values and headers, or `null` on failure.
  */
 function readForecastingData(forecastSheet, config) {
   try {
@@ -99,7 +113,13 @@ function readForecastingData(forecastSheet, config) {
 }
 
 /**
- * Processes forecasting data to generate dashboard metrics with corrected overdue logic.
+ * Processes the raw forecasting data to generate aggregated dashboard metrics.
+ * It calculates monthly summaries for total, upcoming, overdue, and approved projects. It also compiles a
+ * list of all overdue items and counts rows with missing or invalid deadlines.
+ *
+ * @param {any[][]} forecastingValues A 2D array of data from the 'Forecasting' sheet.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {{monthlySummaries: Map<string, any[]>, allOverdueItems: any[][], missingDeadlinesCount: number}} An object containing the processed data.
  */
 function processDashboardData(forecastingValues, config) {
   const monthlySummaries = new Map();
@@ -166,7 +186,17 @@ function processDashboardData(forecastingValues, config) {
 }
 
 /**
- * Renders the main data table, including hover notes for overdue items.
+ * Renders the main data table on the Dashboard sheet.
+ * This function clears and resizes the sheet, sets headers and notes, writes the monthly summary data,
+ * adds hover notes for overdue items, displays grand totals, and applies all necessary formatting.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} dashboardSheet The sheet object for the 'Dashboard'.
+ * @param {object} processedData An object containing processed data, including the count of items with missing deadlines.
+ * @param {Date[]} months An array of Date objects representing the months in the report.
+ * @param {any[][]} dashboardData A 2D array of the monthly summary data to be rendered.
+ * @param {number[]} grandTotals An array containing the grand totals for the summary columns.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function renderDashboardTable(dashboardSheet, processedData, months, dashboardData, grandTotals, config) {
   const { missingDeadlinesCount } = processedData;
@@ -234,11 +264,11 @@ function renderDashboardTable(dashboardSheet, processedData, months, dashboardDa
 
 /**
  * Sets explanatory notes on the dashboard header cells.
- * These notes provide users with definitions for each column, improving clarity.
+ * These notes provide users with clear definitions for each column, improving the dashboard's usability.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
- * @param {object} config The global configuration object.
- * @returns {void}
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function setDashboardHeaderNotes(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
@@ -251,12 +281,12 @@ function setDashboardHeaderNotes(sheet, config) {
 
 /**
  * Applies all visual formatting to the dashboard table.
- * This includes row banding, text alignment, number formats, and borders.
+ * This function handles row banding, text alignment, number formats, and borders to create a polished look.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
- * @param {number} numDataRows The number of data rows to format.
- * @param {object} config The global configuration object.
- * @returns {void}
+ * @param {number} numDataRows The number of data rows in the table to format.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function applyDashboardFormatting(sheet, numDataRows, config) {
   const DL = config.DASHBOARD_LAYOUT;
@@ -279,13 +309,14 @@ function applyDashboardFormatting(sheet, numDataRows, config) {
 
 /**
  * Displays a placeholder message in the area designated for a chart.
- * This is used when chart data is unavailable or a chart fails to render.
+ * This is used as a fallback when chart data is unavailable or if a chart fails to render,
+ * providing clear feedback to the user.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
- * @param {number} anchorRow The row where the chart would be anchored.
- * @param {number} anchorCol The column where the chart would be anchored.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @param {number} anchorRow The row where the chart would normally be anchored.
+ * @param {number} anchorCol The column where the chart would normally be anchored.
  * @param {string} message The message to display in the placeholder.
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
   try {
@@ -298,11 +329,11 @@ function displayChartPlaceholder(sheet, anchorRow, anchorCol, message) {
 }
 
 /**
- * Writes and formats the main headers for the dashboard tables.
+ * Writes and formats the main headers for the dashboard tables and chart area.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
- * @param {object} config The global configuration object.
- * @returns {void}
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function setDashboardHeaders(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
@@ -334,11 +365,11 @@ function setDashboardHeaders(sheet, config) {
 }
 
 /**
- * Hides the columns used for chart data staging to keep the UI clean.
+ * Hides the columns used for chart data staging to keep the user interface clean and uncluttered.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
- * @param {object} config The global configuration object.
- * @returns {void}
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function hideDataColumns(sheet, config) {
   const DL = config.DASHBOARD_LAYOUT;
@@ -348,12 +379,12 @@ function hideDataColumns(sheet, config) {
 }
 
 /**
- * Ensures the sheet has enough columns for hidden chart data and hides them.
+ * Ensures the sheet has enough columns to store hidden chart data, adding them if necessary, and then hides them.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to modify.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to modify.
  * @param {number} startCol The starting column for the hidden data range.
- * @param {number} columnsNeeded The number of columns required.
- * @returns {void}
+ * @param {number} columnsNeeded The total number of columns required for the hidden data.
+ * @returns {void} This function does not return a value.
  */
 function ensureHiddenColumnCapacity(sheet, startCol, columnsNeeded) {
   const requiredEndCol = startCol + columnsNeeded - 1;
@@ -365,11 +396,11 @@ function ensureHiddenColumnCapacity(sheet, startCol, columnsNeeded) {
 }
 
 /**
- * Ensures the sheet has at least a minimum number of rows.
+ * Ensures the sheet has at least a minimum number of rows, adding them if necessary.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to modify.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to modify.
  * @param {number} minRows The minimum number of rows required.
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function ensureRowCapacity(sheet, minRows) {
   const currentMaxRows = sheet.getMaxRows();
@@ -379,14 +410,14 @@ function ensureRowCapacity(sheet, minRows) {
 }
 
 /**
- * Safely clears a block of cells, typically used for hidden chart data.
+ * Safely clears the content, notes, and data validations from a block of cells, typically used for hidden chart data.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet containing the block.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object containing the block.
  * @param {number} startRow The starting row of the block to clear.
  * @param {number} startCol The starting column of the block to clear.
  * @param {number} numRows The number of rows in the block.
  * @param {number} numCols The number of columns in the block.
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function clearHiddenBlock(sheet, startRow, startCol, numRows, numCols) {
   try {
@@ -403,12 +434,12 @@ function clearHiddenBlock(sheet, startRow, startCol, numRows, numCols) {
 }
 
 /**
- * Retrieves a stored count from a cell (typically a hidden one).
- * This is used to track the size of chart data ranges between updates.
+ * Retrieves a numeric count stored in a cell (typically a hidden one).
+ * This is used to track the size of chart data ranges between updates to ensure proper cleanup.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet where the count is stored.
- * @param {number} col The column containing the count (in row 1).
- * @returns {number} The stored count, or 0 if not found or invalid.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object where the count is stored.
+ * @param {number} col The 1-based column index containing the count (in row 1).
+ * @returns {number} The stored count, or `0` if the value is not found or invalid.
  */
 function getStoredCount(sheet, col) {
   try {
@@ -419,12 +450,12 @@ function getStoredCount(sheet, col) {
 }
 
 /**
- * Stores a count in a cell for later retrieval.
+ * Stores a numeric count in a cell for later retrieval.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to store the count in.
- * @param {number} col The column to use for storage (in row 1).
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to store the count in.
+ * @param {number} col The 1-based column index to use for storage (in row 1).
  * @param {number} count The count to store.
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function setStoredCount(sheet, col, count) {
   try {
@@ -434,13 +465,14 @@ function setStoredCount(sheet, col, count) {
 
 /**
  * Creates or updates the summary charts on the dashboard.
- * It removes existing charts, stages data in hidden columns, and then builds new charts.
+ * It removes all existing charts, stages the necessary data in hidden columns, and then builds new charts
+ * for past and upcoming months based on the configuration.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet.
- * @param {Date[]} months The list of month Date objects for the x-axis.
- * @param {Array<Array<number>>} dashboardData The aggregated data for all months.
- * @param {object} config The global configuration object.
- * @returns {void}
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The dashboard sheet object.
+ * @param {Date[]} months The array of Date objects representing the months for the x-axis.
+ * @param {any[][]} dashboardData The aggregated summary data for all months.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
   sheet.getCharts().forEach(function(chart) { sheet.removeChart(chart); });
@@ -525,7 +557,8 @@ function createOrUpdateDashboardCharts(sheet, months, dashboardData, config) {
 }
 
 /**
- * Normalizes a date to the beginning of its month (midnight on the 1st).
+ * Normalizes a given date to the beginning of its month (midnight on the 1st day).
+ *
  * @private
  * @param {Date} d The date to normalize.
  * @returns {Date} A new Date object set to the start of the month.
@@ -538,11 +571,11 @@ function getMonthStart_(d) {
 }
 
 /**
- * Generates an array of Date objects, one for each month between a start and end date.
+ * Generates an array of Date objects, with one entry for each month between a start and end date, inclusive.
  *
  * @param {Date} startDate The first month to include in the list.
  * @param {Date} endDate The last month to include in the list.
- * @returns {Date[]} An array of Date objects, each representing the first day of a month.
+ * @returns {Date[]} An array of Date objects, where each object represents the first day of a month.
  */
 function generateMonthList(startDate, endDate) {
   const months = [];
@@ -557,8 +590,12 @@ function generateMonthList(startDate, endDate) {
 }
 
 /**
- * Verification function to audit the Dashboard's overdue calculations.
- * This can be run manually from the Apps Script editor to ensure data integrity.
+ * A verification function to audit the Dashboard's overdue calculations against the source data.
+ * This can be run manually from the Apps Script editor to ensure data integrity. It checks:
+ * 1. If the grand total overdue count on the dashboard matches a direct recalculation from the 'Forecasting' sheet.
+ * 2. If the monthly overdue counts match the number of items listed in their corresponding hover notes.
+ *
+ * @returns {void} This function does not return a value; it logs its findings.
  */
 function runDashboardVerification() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();

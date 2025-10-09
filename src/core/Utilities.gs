@@ -1,9 +1,14 @@
 /**
  * @OnlyCurrentDoc
+ *
  * Utilities.gs
+ *
  * A collection of shared, reusable functions for data normalization, date/time handling,
  * sheet interactions, and general-purpose data manipulation. These utilities form the
  * foundational building blocks for the entire application.
+ *
+ * @version 1.0.0
+ * @release 2024-07-29
  */
 
 // =================================================================
@@ -12,14 +17,14 @@
 
 /**
  * Normalizes a value into a consistent string representation for reliable comparisons.
- * This function is **critical** for preventing infinite loops in `onEdit` triggers, where a
- * script's own edit might be detected as a new change. It handles various data types:
- * - `null`/`undefined` become an empty string.
+ * This function is **critical** for preventing infinite loops in `onEdit` triggers by ensuring that a script's
+ * own edit does not appear as a new change. It handles various data types as follows:
+ * - `null` or `undefined` become an empty string `""`.
  * - Booleans become `"true"` or `"false"`.
- * - Dates are formatted into a consistent, timezone-aware ISO-like string.
+ * - Date objects are formatted into a consistent, timezone-aware ISO-like string (`yyyy-MM-dd'T'HH:mm:ss`).
  * - All other types are converted to a string and trimmed.
  *
- * @param {*} val The value to normalize.
+ * @param {*} val The value of any type to be normalized.
  * @returns {string} The normalized string representation of the value.
  */
 function normalizeForComparison(val) {
@@ -32,11 +37,11 @@ function normalizeForComparison(val) {
 }
 
 /**
- * Normalizes any value into a lowercased, trimmed string. This is the standard
- * function for preparing user-entered strings for case-insensitive comparisons.
+ * Normalizes any value into a lowercased, trimmed string.
+ * This is the standard function for preparing user-entered strings for case-insensitive comparisons.
  *
- * @param {*} val The value to normalize.
- * @returns {string} The normalized, lowercased string. Returns an empty string if input is null/undefined.
+ * @param {*} val The value of any type to normalize.
+ * @returns {string} The normalized, lowercased string. Returns an empty string `""` if the input is null or undefined.
  */
 function normalizeString(val) {
   if (val === null || val === undefined) return "";
@@ -44,12 +49,11 @@ function normalizeString(val) {
 }
 
 /**
- * Checks if a value is "true-like", useful for handling spreadsheet checkbox values or user input.
- * It evaluates to true for the boolean `true` or for case-insensitive strings like
- * "true", "yes", "y", or "1".
+ * Checks if a value is "true-like", which is useful for handling spreadsheet checkbox values or user input.
+ * It evaluates to `true` for the boolean `true` or for case-insensitive strings such as "true", "yes", "y", or "1".
  *
  * @param {*} val The value to check.
- * @returns {boolean} `true` if the value is considered "true-like", otherwise `false`.
+ * @returns {boolean} Returns `true` if the value is considered "true-like", otherwise `false`.
  */
 function isTrueLike(val) {
   const v = normalizeString(val);
@@ -62,11 +66,11 @@ function isTrueLike(val) {
 
 /**
  * Parses a value into a Date object and normalizes it to the beginning of the day (midnight) in the script's timezone.
- * This is essential for date-based comparisons where the time of day is irrelevant.
- * It robustly handles native Date objects, ISO-like strings (YYYY-MM-DD), and common US date formats (M/D/YYYY).
+ * This is essential for date-based comparisons where the time of day is irrelevant. It robustly handles native Date objects,
+ * ISO-like strings (e.g., `YYYY-MM-DD`), and common US date formats (e.g., `M/D/YYYY`), while safely ignoring numeric strings.
  *
- * @param {*} input The value to parse (can be a Date object, a date string, or a number).
- * @returns {Date|null} A new Date object set to midnight, or `null` if the value is not a valid date.
+ * @param {any} input The value to parse, which can be a Date object, a date string, or a number.
+ * @returns {Date|null} A new Date object set to midnight, or `null` if the input cannot be parsed as a valid date.
  */
 function parseAndNormalizeDate(input) {
   if (!input) return null;
@@ -122,12 +126,12 @@ function parseAndNormalizeDate(input) {
 }
 
 /**
- * Formats a value for use in creating unique string-based keys, a core part of the
- * `TransferEngine`'s duplicate checking mechanism. It handles Dates and other values differently:
- * - Dates are formatted as `"yyyy-MM-dd"`.
- * - Other values are normalized to a lowercased, trimmed string.
+ * Formats a value for use in creating unique string-based keys, a core part of the `TransferEngine`'s duplicate checking mechanism.
+ * It handles Date objects and other values differently to ensure consistent comparisons:
+ * - Date objects and recognizable date strings are formatted as `"yyyy-MM-dd"`.
+ * - All other values are normalized to a lowercased, trimmed string.
  *
- * @param {*} value The value to format.
+ * @param {any} value The value to format.
  * @returns {string} The formatted string, ready for use as a key.
  */
 function formatValueForKey(value) {
@@ -144,8 +148,7 @@ function formatValueForKey(value) {
 
 /**
  * Generates a padded, sortable month key in `"YYYY-MM"` format from a Date object.
- * This is primarily used by the `LoggerService` to create standardized, chronologically
- * sortable names for monthly log sheets.
+ * This is primarily used by the `LoggerService` to create standardized, chronologically sortable names for monthly log sheets.
  *
  * @param {Date} [d=new Date()] The date to format. Defaults to the current date if not provided.
  * @returns {string} The formatted month key (e.g., `"2024-07"`).
@@ -163,11 +166,11 @@ function getMonthKeyPadded(d) {
 
 /**
  * Finds the 1-based column index of a header by its text in the first row of a sheet.
- * The search is case-insensitive and trims whitespace to be robust against user formatting.
+ * The search is case-insensitive and trims whitespace to be robust against variations in user formatting.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search in.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search in.
  * @param {string} headerText The text of the header to find (e.g., "Project Name").
- * @returns {number} The 1-based column index of the header, or -1 if not found.
+ * @returns {number} The 1-based column index of the header, or `-1` if not found.
  */
 function getHeaderColumnIndex(sheet, headerText) {
   const lastCol = sheet.getMaxColumns();
@@ -183,14 +186,13 @@ function getHeaderColumnIndex(sheet, headerText) {
 
 /**
  * Performs a robust, case-insensitive search for a project by name and returns its 1-based row index.
- * This function uses a manual, row-by-row scan that normalizes both the search term and the
- * sheet values using `formatValueForKey`. This ensures that comparisons are consistent with
- * the duplicate checker and correctly handle values that might look like dates (e.g., "10/25/2024").
+ * This function uses a row-by-row scan that normalizes both the search term and the sheet values using `formatValueForKey`.
+ * This ensures that comparisons are consistent with the duplicate checker and correctly handle values that might look like dates (e.g., "10/25/2024").
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search.
  * @param {string} projectName The name of the project to find.
  * @param {number} projectNameCol The 1-based column index where project names are stored.
- * @returns {number} The 1-based row index of the project, or -1 if not found.
+ * @returns {number} The 1-based row index of the project, or `-1` if not found.
  */
 function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
   if (!sheet || !projectName || typeof projectName !== "string" || !projectNameCol) return -1;
@@ -223,13 +225,13 @@ function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
 
 /**
  * Finds a row by an exact, case-sensitive match for a value in a specific column.
- * This function is optimized for looking up unique identifiers like a Salesforce ID (SFID)
- * where an exact, case-sensitive match is required.
+ * This function is optimized for looking up unique identifiers like a Salesforce ID (SFID) where an exact, case-sensitive match is required.
+ * It trims whitespace from both the search value and the sheet values before comparison.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search.
- * @param {*} value The exact value to find. Must not be null, undefined, or an empty string.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search.
+ * @param {any} value The exact value to find. Must not be null, undefined, or an empty string.
  * @param {number} column The 1-based column index to search within.
- * @returns {number} The 1-based row index of the first match, or -1 if not found.
+ * @returns {number} The 1-based row index of the first match, or `-1` if not found.
  */
 function findRowByValue(sheet, value, column) {
   if (!sheet || value == null || !column) return -1;
@@ -250,17 +252,16 @@ function findRowByValue(sheet, value, column) {
 }
 
 /**
- * Implements an "SFID-first" lookup strategy to robustly find a row in a sheet.
- * It first tries to find a match using the `sfid`. If no `sfid` is provided or if no match
- * is found, it falls back to searching by the `projectName` for backward compatibility with
- * legacy data that may not have an SFID.
+ * Implements an "SFID-first" lookup strategy to find a row in a sheet.
+ * It first tries to find a match using the `sfid`. If no `sfid` is provided or if no match is found,
+ * it falls back to searching by `projectName` for backward compatibility with legacy data.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to search in.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search in.
  * @param {string} sfid The Salesforce ID to search for. Can be null or empty.
  * @param {number} sfidCol The 1-based column index for SFIDs.
  * @param {string} projectName The project name to use as a fallback identifier.
  * @param {number} projectNameCol The 1-based column index for project names.
- * @returns {number} The 1-based row index of the matched row, or -1 if not found.
+ * @returns {number} The 1-based row index of the matched row, or `-1` if not found.
  */
 function findRowByBestIdentifier(sheet, sfid, sfidCol, projectName, projectNameCol) {
   if (sfid) {
@@ -273,8 +274,8 @@ function findRowByBestIdentifier(sheet, sfid, sfidCol, projectName, projectNameC
 }
 
 /**
- * Gets a sheet by its name. If the sheet does not exist, it creates and returns the new sheet.
- * This is a convenient idempotent operation used throughout the script to ensure target sheets exist.
+ * Gets a sheet by its name. If the sheet does not exist, it creates and returns it.
+ * This is a convenient idempotent operation used throughout the script to ensure target sheets always exist.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The parent spreadsheet object.
  * @param {string} sheetName The name of the sheet to get or create.
@@ -291,10 +292,10 @@ function getOrCreateSheet(ss, sheetName) {
  * This is crucial for maintaining a consistent layout on report sheets like the Dashboard,
  * preventing them from growing or shrinking unexpectedly.
  *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to prepare.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to prepare.
  * @param {number} requiredRowCount The exact number of rows the sheet must have.
  * @param {number} [requiredColCount] Optional. The exact number of columns the sheet must have.
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function clearAndResizeSheet(sheet, requiredRowCount, requiredColCount) {
   if (!sheet || typeof requiredRowCount !== 'number' || requiredRowCount < 1) {
@@ -325,8 +326,9 @@ function clearAndResizeSheet(sheet, requiredRowCount, requiredColCount) {
 // =================================================================
 
 /**
- * Creates a simple mapping object from an array of [source, destination] pairs.
+ * Creates a simple mapping object from an array of `[source, destination]` pairs.
  * This provides a clean, readable way to define column mappings for the `TransferEngine`.
+ * Example: `createMapping([[1, 2], [3, 5]])` returns `{1: 2, 3: 5}`.
  *
  * @param {Array<[number, number]>} pairs An array of pairs, where each pair is `[sourceColumn, destinationColumn]`.
  * @returns {Object<number, number>} An object where keys are source columns and values are destination columns.
@@ -340,12 +342,12 @@ function createMapping(pairs) {
 }
 
 /**
- * Gets the maximum numeric value among an object's values.
- * This is used by the `TransferEngine` to determine the required width of a new row when
- * building it from a destination column mapping, ensuring the new row is wide enough.
+ * Gets the maximum numeric value from an object's values.
+ * This is used by the `TransferEngine` to determine the required width of a new row when building it
+ * from a destination column mapping, ensuring the new row is wide enough to hold all mapped data.
  *
  * @param {Object<any, number>} obj The object to inspect, expecting numeric values.
- * @returns {number} The highest numeric value found, or 0 if none exist.
+ * @returns {number} The highest numeric value found, or `0` if no numeric values exist.
  */
 function getMaxValueInObject(obj) {
   let max = 0;
@@ -374,13 +376,13 @@ function uniqueArray(arr) {
 // =================================================================
 
 /**
- * Attempts to acquire a script lock with a retry mechanism, making it more resilient
- * to brief contention.
+ * Attempts to acquire a script lock with a retry mechanism, making it more resilient to brief contention.
+ * If the lock cannot be acquired immediately, it will wait and try again.
  *
- * @param {GoogleAppsScript.Lock.Lock} lock The LockService lock object to acquire.
+ * @param {GoogleAppsScript.Lock.Lock} lock The `LockService` lock object to acquire.
  * @param {number} [maxRetries=3] The maximum number of times to attempt acquiring the lock.
  * @param {number} [delayMs=1000] The delay in milliseconds between retry attempts.
- * @returns {boolean} `true` if the lock was acquired, `false` otherwise.
+ * @returns {boolean} Returns `true` if the lock was acquired, `false` otherwise.
  */
 function acquireLockWithRetry(lock, maxRetries, delayMs) {
   const retries = maxRetries === undefined ? 3 : maxRetries;
