@@ -192,7 +192,10 @@ function getHeaderColumnIndex(sheet, headerText) {
 
 /**
  * Performs a robust, case-insensitive search for a project by name and returns its 1-based row index.
- * This function uses a row-by-row scan that normalizes both the search term and the sheet values using `formatValueForKey`.
+ * This function uses a row-by-row scan that normalizes both the search term and the sheet values.
+ * **Note on Bug Fix:** This function previously used `formatValueForKey`, which incorrectly parsed date-like strings
+ * (e.g., "5/10/2024") as dates, leading to incorrect matches. It now uses `normalizeString` to ensure
+ * project names are always treated as case-insensitive strings.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search.
  * @param {string} projectName The name of the project to find.
@@ -215,10 +218,10 @@ function findRowByProjectNameRobust(sheet, projectName, projectNameCol) {
     return sheet.getRange(2, projectNameCol, lastRow - 1, 1).getValues();
   }, { functionName: "findRowByProjectNameRobust:readColumn" });
 
-  const targetKey = formatValueForKey(searchNameTrimmed);
+  const targetKey = normalizeString(searchNameTrimmed);
   for (let i = 0; i < vals.length; i++) {
     const v = vals[i][0];
-    if (v && formatValueForKey(v) === targetKey) {
+    if (v && normalizeString(v) === targetKey) {
       return i + 2;
     }
   }

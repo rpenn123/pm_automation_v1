@@ -148,6 +148,7 @@ const transferEngineSortTestGs = fs.readFileSync('tests/test_TransferEngine_Sort
 const findRowByValueTestGs = fs.readFileSync('tests/test_findRowByValue.gs', 'utf8');
 const errorHandlingTestGs = fs.readFileSync('tests/test_ErrorHandling.gs', 'utf8');
 const transferEngineReadWidthTestGs = fs.readFileSync('tests/test_TransferEngine_ReadWidth.gs', 'utf8');
+const dateAsNameBugfixTestGs = fs.readFileSync('tests/bugfix/DateAsName.test.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
@@ -182,6 +183,7 @@ eval(transferEngineSortTestGs);
 eval(findRowByValueTestGs);
 eval(errorHandlingTestGs);
 eval(transferEngineReadWidthTestGs);
+eval(dateAsNameBugfixTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -189,6 +191,8 @@ eval(transferEngineReadWidthTestGs);
 
 // Run the tests
 try {
+    console.log("\n--- Running Date-As-Name Bugfix tests ---");
+    runDateAsNameBugfixTests();
     console.log("\n--- Running new bugfix test ---");
     runRobustFindTest();
     console.log("\n--- Running existing utility tests ---");
