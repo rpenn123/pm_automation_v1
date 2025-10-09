@@ -7,8 +7,8 @@
  * sheet interactions, and general-purpose data manipulation. These utilities form the
  * foundational building blocks for the entire application.
  *
- * @version 1.0.0
- * @release 2024-07-29
+ * @version 1.1.0
+ * @release 2025-10-08
  */
 
 // =================================================================

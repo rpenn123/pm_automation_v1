@@ -7,8 +7,8 @@
  * This service provides a user-friendly way to see how recently a row has been modified
  * by adding a human-readable relative timestamp (e.g., "5 min. ago").
  *
- * @version 1.0.0
- * @release 2024-07-29
+ * @version 1.1.0
+ * @release 2025-10-08
  */
 
 /**

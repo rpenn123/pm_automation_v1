@@ -40,6 +40,17 @@ The system is event-driven and modular, built around a few key components:
 
 5.  **The Dashboard (`src/ui/Dashboard.gs`):** This script reads data from the `Forecasting` sheet, performs all the necessary calculations and aggregations in memory, and then renders the final tables and charts on the `Dashboard` sheet.
 
+### Dashboard Overdue Logic and Data Flow
+
+The dashboard provides a high-level summary of project timelines. A project from the **Forecasting** sheet is considered **Overdue** if it meets **both** of the following criteria:
+
+1.  **Deadline:** The date in the `Deadline` column is on or before today's date.
+2.  **Status:** The project's status in the `Progress` column is **exactly** "In Progress".
+
+Projects with any other status (e.g., "Scheduled", "Completed", "Cancelled") are **not** counted as overdue, regardless of their deadline.
+
+During the update process, the script collects all overdue projects and lists them in the hover-note for the corresponding month's "Overdue" cell on the dashboard, providing an immediate drill-down capability.
+
 ## 4. Setup and Usage
 
 Follow these steps to get the project cloned, deployed, and running.
@@ -104,7 +115,7 @@ The repository is organized to separate concerns, making it easier to navigate a
 │   │   ├── Dashboard.gs       # Logic for generating the dashboard sheet.
 │   │   └── Setup.gs           # Creates the custom menu (onOpen) and setup routines.
 │   └── Config.gs # Central configuration for the entire application.
-├── tests/        # Manual testing plans
+├── tests/        # Manual test plans and local unit test suites.
 ├── package.json  # Defines scripts and dependencies
 └── README.md     # This file
 ```
@@ -134,10 +145,49 @@ DEADLINE: 11, // K
 A detailed manual test plan is located in `tests/smoke-test.md`. This should be run against the TEST environment after every deployment to verify core functionality.
 
 ### Automated Verification
-The script includes a built-in verification function to audit the Dashboard's calculations. To run it:
-1. Open the Apps Script editor in your spreadsheet.
-2. From the function dropdown, select `runDashboardVerification` and click **Run**.
-3. Check the **Execution Log** at the bottom of the screen to see a report comparing the dashboard's totals against a direct recalculation from the source data.
+The script includes a built-in verification function to audit the Dashboard's calculations against the source data. This is useful for ensuring data integrity after significant changes.
+
+To run the verification:
+1.  Open the Apps Script editor in your spreadsheet (**Extensions > Apps Script**).
+2.  From the function dropdown list at the top, select `runDashboardVerification`.
+3.  Click the **Run** button.
+4.  After it finishes, view the results in the **Execution Log** (`Ctrl+Enter` or `Cmd+Enter`).
+
+The log will show a report comparing the dashboard's grand total for overdue items against a direct recalculation from the `Forecasting` sheet. It also spot-checks a monthly total against its hover note. A success message indicates that the dashboard's totals match the direct calculation.
+
+### Local Unit Testing
+
+The project includes a lightweight, custom unit testing framework that allows you to run tests for your `.gs` files locally using Node.js, without needing to deploy them to a Google Sheet. This provides a much faster feedback loop for development and allows for testing business logic in isolation.
+
+**How to Run the Tests:**
+
+From the root of the project directory, run the following command:
+
+```sh
+node run_test.js
+```
+
+The script will execute all test suites defined in the `tests/` directory and log the results to the console. If any test fails, the script will exit with an error code.
+
+**How It Works:**
+
+The `run_test.js` script is a custom test runner that performs the following steps:
+
+1.  **Mocks Globals:** It creates mock versions of the global Google Apps Script objects that the source code depends on (e.g., `SpreadsheetApp`, `Logger`, `Utilities`, `LockService`). These mocks simulate the GAS environment.
+2.  **Loads Files:** It reads the contents of all source `.gs` files from `src/` and test `.gs` files from `tests/` into memory using Node's `fs.readFileSync`.
+3.  **Modifies Code for Tests:** It performs minor string replacements on the loaded code to make certain functions and constants globally accessible for testing (e.g., changing `const CONFIG =` to `global.CONFIG =`).
+4.  **Executes Code:** It uses `eval()` to execute all the loaded source code and test code in the Node.js global scope.
+5.  **Runs Test Suites:** Finally, it calls the main test functions (e.g., `runUtilityTests()`, `runTransferEngineTests()`) which are now available in the scope.
+
+**Adding a New Test File:**
+
+To add a new test suite (e.g., `tests/my_new_feature.test.gs`):
+
+1.  Create your new test file in the `tests/` directory. It should contain one or more test functions, and a main runner function (e.g., `runMyNewFeatureTests()`).
+2.  Open `run_test.js` and make the following three changes:
+    a.  **Load the file:** Add a new `fs.readFileSync` line to load your new test file.
+    b.  **Evaluate the file:** Add an `eval()` line for your new test file's content.
+    c.  **Call the runner:** Add a call to your main test runner function inside the `try` block at the end of the script.
 
 ## 8. CI/Deployment
 

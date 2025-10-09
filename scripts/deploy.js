@@ -1,3 +1,17 @@
+/**
+ * @fileoverview This script automates the deployment of the Google Apps Script project.
+ * It ensures a safe and consistent deployment by performing a series of checks and operations in sequence:
+ * 1. Verifies that the correct environment ('test' or 'prod') is specified.
+ * 2. Checks for any uncommitted git changes (excluding package-lock.json) and aborts if any are found.
+ * 3. Pulls the latest changes from the git repository.
+ * 4. Installs npm dependencies.
+ * 5. Validates the clasp configuration files using `validate-config.js`.
+ * 6. Copies the appropriate environment-specific `.clasp.[env].json` file to `.clasp.json`.
+ * 7. Pushes the code to the corresponding Google Apps Script project using `clasp push`.
+ *
+ * @usage node scripts/deploy.js <test|prod>
+ */
+
 const { exec, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -9,6 +23,12 @@ if (!['test', 'prod'].includes(env)) {
   process.exit(1);
 }
 
+/**
+ * Executes a shell command asynchronously and pipes its output to the console.
+ * Exits the process if the command fails.
+ * @param {string} command The shell command to execute.
+ * @param {function} [onSuccess] A callback function to execute if the command succeeds.
+ */
 function runCommand(command, onSuccess) {
   console.log(`\n> ${command}`);
   const childProcess = exec(command);
@@ -27,26 +47,24 @@ function runCommand(command, onSuccess) {
   });
 }
 
+/**
+ * Checks for uncommitted changes in the git repository, ignoring package-lock.json.
+ * If changes are found, the script aborts to prevent an unsafe deployment.
+ * If the working directory is clean, it proceeds to the next step in the deployment chain.
+ */
 function checkUncommittedChanges() {
     console.log('Checking for uncommitted changes...');
     try {
         const status = execSync('git status --porcelain').toString().trim();
-
         if (status) {
-            // `git status --porcelain` outputs lines like ' M path/to/file.js'
-            // We split the line by spaces and take the last part to get the filename.
             const changedFiles = status.split('\n').map(line => line.trim().split(' ').pop());
-
-            // Filter out package-lock.json to see if any *other* files were changed.
             const otherChanges = changedFiles.filter(file => file !== 'package-lock.json');
-
             if (otherChanges.length > 0) {
                 console.error('Error: You have uncommitted changes. Please commit or stash them before deploying.');
                 console.error('Uncommitted files:', otherChanges.join(', '));
                 process.exit(1);
             }
         }
-
         console.log('No uncommitted changes found (ignoring package-lock.json).');
         pullLatestChanges();
     } catch (error) {
@@ -55,19 +73,32 @@ function checkUncommittedChanges() {
     }
 }
 
+/**
+ * Pulls the latest changes from the current git branch.
+ */
 function pullLatestChanges() {
   console.log('\nPulling latest changes from git...');
   runCommand('git pull', installDependencies);
 }
 
+/**
+ * Installs or updates npm dependencies.
+ */
 function installDependencies() {
   runCommand('npm install', validateConfig);
 }
 
+/**
+ * Runs the configuration validation script.
+ */
 function validateConfig() {
   runCommand('npm run validate-config', copyClaspConfig);
 }
 
+/**
+ * Copies the environment-specific clasp configuration file to the root `.clasp.json`.
+ * This is the mechanism that directs `clasp` to the correct Google Apps Script project.
+ */
 function copyClaspConfig() {
   console.log('\nCopying clasp config file...');
   const rootDir = process.cwd();
@@ -85,8 +116,11 @@ function copyClaspConfig() {
   pushToClasp();
 }
 
+/**
+ * Pushes the source code from the `src` directory to the linked Google Apps Script project.
+ * Uses the `-f` flag to force an overwrite of the remote project.
+ */
 function pushToClasp() {
-  // Use -f to force overwrite
   runCommand('npx clasp push -f', () => {
     console.log('\nDeployment script finished successfully.');
   });

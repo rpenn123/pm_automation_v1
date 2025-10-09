@@ -7,8 +7,8 @@
  * This script provides the primary user interface for running manual script operations,
  * such as initial setup, dashboard updates, and configuration.
  *
- * @version 1.0.0
- * @release 2024-07-29
+ * @version 1.1.0
+ * @release 2025-10-08
  */
 
 /**

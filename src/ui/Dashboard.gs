@@ -6,8 +6,8 @@
  * This script generates the main dashboard, which includes data processing, table rendering, charts,
  * and an overdue items drill-down. The design focuses on correctness, idempotence, performance, and a clean user experience.
  *
- * @version 1.5.1
- * @release 2024-07-29
+ * @version 1.6.0
+ * @release 2025-10-08
  */
 
 /**

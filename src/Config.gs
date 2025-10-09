@@ -11,8 +11,8 @@
  * All column numbers are intentionally 1-indexed to match the user-facing view in Google Sheets.
  * Any code that uses these values to access 0-indexed arrays MUST subtract 1.
  *
- * @version 1.0.0
- * @release 2024-07-29
+ * @version 1.1.0
+ * @release 2025-10-08
  */
 
 /**
