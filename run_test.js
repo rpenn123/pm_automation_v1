@@ -147,6 +147,7 @@ const transferEngineTestGs = fs.readFileSync('tests/test_TransferEngine.gs', 'ut
 const transferEngineSortTestGs = fs.readFileSync('tests/test_TransferEngine_Sort.gs', 'utf8');
 const findRowByValueTestGs = fs.readFileSync('tests/test_findRowByValue.gs', 'utf8');
 const errorHandlingTestGs = fs.readFileSync('tests/test_ErrorHandling.gs', 'utf8');
+const transferEngineReadWidthTestGs = fs.readFileSync('tests/test_TransferEngine_ReadWidth.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
@@ -180,6 +181,7 @@ eval(transferEngineTestGs);
 eval(transferEngineSortTestGs);
 eval(findRowByValueTestGs);
 eval(errorHandlingTestGs);
+eval(transferEngineReadWidthTestGs);
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
@@ -207,6 +209,8 @@ try {
     runFindRowByValueTests();
     console.log("\n--- Running Error Handling tests ---");
     runErrorHandlingTests();
+    console.log("\n--- Running Transfer Engine Read Width tests ---");
+    runTransferEngineReadWidthTests();
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);
