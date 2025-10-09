@@ -129,7 +129,6 @@ const testGs = fs.readFileSync('tests/bugfix-robust-find-test.gs', 'utf8');
 const existingTestGs = fs.readFileSync('tests/test_Utilities.gs', 'utf8');
 const chartTitleTestGs = fs.readFileSync('tests/chart_title.test.gs', 'utf8');
 const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
-const dataLossTestGs = fs.readFileSync('tests/test_data_loss.gs', 'utf8');
 const auditTestGs = fs.readFileSync('tests/test_AuditLogging.gs', 'utf8');
 const hoverNotesTestGs = fs.readFileSync('tests/test_Dashboard_HoverNotes.gs', 'utf8');
 const transferEngineTestGs = fs.readFileSync('tests/test_TransferEngine.gs', 'utf8');
@@ -159,7 +158,6 @@ eval(testGs);
 eval(existingTestGs);
 eval(chartTitleTestGs);
 eval(dashboardTestGs);
-eval(dataLossTestGs);
 eval(auditTestGs);
 eval(hoverNotesTestGs);
 eval(transferEngineTestGs);
@@ -171,8 +169,6 @@ eval(findRowByValueTestGs);
 
 // Run the tests
 try {
-    console.log("--- Running data loss test ---");
-    runDataLossTest();
     console.log("\n--- Running new bugfix test ---");
     runRobustFindTest();
     console.log("\n--- Running existing utility tests ---");

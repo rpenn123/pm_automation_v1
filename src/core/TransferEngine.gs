@@ -78,7 +78,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
       const mappedSourceCols = Object.keys(config.destinationColumnMapping || {}).map(Number);
       const compoundKeyCols = (config.duplicateCheckConfig && config.duplicateCheckConfig.compoundKeySourceCols) || [];
       const maxSourceColNeeded = Math.max(...(config.sourceColumnsNeeded || []), ...mappedSourceCols, ...compoundKeyCols);
-      const actualLastSourceCol = sourceSheet.getLastColumn();
+      const actualLastSourceCol = sourceSheet.getMaxColumns();
       readWidth = Math.min(maxSourceColNeeded, actualLastSourceCol);
       // Read the necessary part of the row in a single batch
       sourceRowData = sourceSheet.getRange(editedRow, 1, 1, readWidth).getValues()[0];
