@@ -79,29 +79,39 @@ global.LockService = {
     }),
 };
 
-// Simple mock for jest functions used in tests
+// More robust mock for Jest functions to support implementation and restoration.
 const jest = {
     spyOn: (obj, funcName) => {
         const originalFunc = obj[funcName];
-        const mock = {
-            calls: [],
+        let implementation = originalFunc;
+
+        const spy = {
             mock: {
                 calls: []
+            },
+            mockImplementation: function(fn) {
+                implementation = fn;
+                return this;
+            },
+            mockRestore: function() {
+                obj[funcName] = originalFunc;
             }
         };
+
         obj[funcName] = (...args) => {
-            mock.calls.push(args);
-            mock.mock.calls.push(args);
-            return originalFunc.apply(obj, args);
+            spy.mock.calls.push(args);
+            return implementation.apply(obj, args);
         };
-        return mock;
+
+        return spy;
     },
-    fn: () => {
+    fn: (implementation) => {
         const mock = (...args) => {
-            mock.calls.push(args);
             mock.mock.calls.push(args);
+            if (implementation) {
+                return implementation(...args);
+            }
         };
-        mock.calls = [];
         mock.mock = {
             calls: []
         };
@@ -132,12 +142,14 @@ const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
 const auditTestGs = fs.readFileSync('tests/test_AuditLogging.gs', 'utf8');
 const hoverNotesTestGs = fs.readFileSync('tests/test_Dashboard_HoverNotes.gs', 'utf8');
 const transferEngineTestGs = fs.readFileSync('tests/test_TransferEngine.gs', 'utf8');
+const transferEngineSortTestGs = fs.readFileSync('tests/test_TransferEngine_Sort.gs', 'utf8');
 const findRowByValueTestGs = fs.readFileSync('tests/test_findRowByValue.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
-// Make logAudit global for spying
+// Make logAudit and notifyError global for spying
 loggerServiceGs = loggerServiceGs.replace('function logAudit(', 'global.logAudit = function logAudit(');
+loggerServiceGs = loggerServiceGs.replace('function notifyError(', 'global.notifyError = function notifyError(');
 // Make readForecastingData global for mocking in tests
 dashboardGs = dashboardGs.replace('function readForecastingData(', 'global.readForecastingData = function readForecastingData(');
 // Make updateLastEditForRow global for mocking in tests
@@ -161,6 +173,7 @@ eval(dashboardTestGs);
 eval(auditTestGs);
 eval(hoverNotesTestGs);
 eval(transferEngineTestGs);
+eval(transferEngineSortTestGs);
 eval(findRowByValueTestGs);
 
 // =================================================================
@@ -183,6 +196,8 @@ try {
     test_Dashboard_HoverNotes();
     console.log("\n--- Running Transfer Engine tests ---");
     runTransferEngineTests();
+    console.log("\n--- Running Transfer Engine Sort tests ---");
+    runTransferEngineSortTests();
     console.log("\n--- Running findRowByValue tests ---");
     runFindRowByValueTests();
     console.log("\nTest execution finished successfully.");

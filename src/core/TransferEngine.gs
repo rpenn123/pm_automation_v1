@@ -153,7 +153,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
     }
 
     // Post Transfer Actions (e.g., Sorting)
-    if (config.postTransferActions && config.postTransferActions.sort && appendedRow > 1) {
+    if (config.postTransferActions && config.postTransferActions.sort && appendedRow > 2) {
       SpreadsheetApp.flush(); // Ensure data is written before sorting
       try {
         const { sortColumn, sortAscending } = config.postTransferActions;
