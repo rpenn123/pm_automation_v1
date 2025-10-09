@@ -159,7 +159,7 @@ function executeTransfer(e, config, preReadSourceRowData) {
       try {
         const { sortColumn, sortAscending } = config.postTransferActions;
         // Get range excluding the header
-        const range = destinationSheet.getRange(2, 1, appendedRow - 1, destinationSheet.getLastColumn());
+        const range = destinationSheet.getRange(2, 1, appendedRow - 1, destinationSheet.getMaxColumns());
         range.sort({ column: sortColumn, ascending: !!sortAscending });
       } catch (sortError) {
         // Notify about sort failure, but the transfer itself succeeded
@@ -263,7 +263,7 @@ function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRow
   const maxCol = Math.max(...colsToRead);
   const readWidth = maxCol - minCol + 1;
 
-  if (maxCol > destinationSheet.getLastColumn()) {
+  if (maxCol > destinationSheet.getMaxColumns()) {
     Logger.log("Duplicate check warning: destination sheet missing expected columns for compound key. Check may be incomplete.");
   }
 
