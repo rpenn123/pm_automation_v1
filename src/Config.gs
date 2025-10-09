@@ -1,9 +1,18 @@
 /**
  * @OnlyCurrentDoc
+ *
  * Config.gs
- * Centralized configuration for the entire project (Automations and Dashboard).
- * Standardized on 1-based indexing for clarity (matching the spreadsheet view).
- * Code MUST subtract 1 when accessing array indices (0-based).
+ *
+ * This file serves as the central configuration hub for the entire project, including all automations and the dashboard.
+ * It defines sheet names, column mappings (1-based), status strings, and settings for UI, logging, and charting.
+ * By centralizing these values, the script becomes easier to maintain, update, and adapt to changes in the
+ * spreadsheet structure.
+ *
+ * All column numbers are intentionally 1-indexed to match the user-facing view in Google Sheets.
+ * Any code that uses these values to access 0-indexed arrays MUST subtract 1.
+ *
+ * @version 1.0.0
+ * @release 2024-07-29
  */
 
 /**

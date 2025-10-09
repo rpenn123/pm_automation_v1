@@ -1,19 +1,27 @@
 /**
  * @OnlyCurrentDoc
+ *
  * LoggerService.gs
- * Handles error notifications via email and the external monthly audit log system.
+ *
+ * Handles critical error notifications via email and manages the external monthly audit log system.
+ * This service ensures that errors are reported to administrators and that all significant
+ * actions are recorded for accountability and debugging.
+ *
+ * @version 1.0.0
+ * @release 2024-07-29
  */
 
 /**
  * Sends a formatted email notification when a critical error occurs.
- * This function constructs a detailed HTML email with the error message, stack trace,
- * and spreadsheet context. It includes a plain text fallback for email clients
- * that do not support HTML.
+ * This function constructs a detailed HTML email with the error message, stack trace, and spreadsheet context.
+ * It includes a plain text fallback for email clients that do not support HTML. It will not send an email
+ * if no valid recipient is configured in Script Properties.
  *
  * @param {string} subjectDetails A brief description of the error context (e.g., "Dashboard Update Failed").
- * @param {Error} error The JavaScript Error object that was caught.
+ * @param {Error} error The JavaScript `Error` object that was caught.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss] The spreadsheet where the error occurred. Defaults to the active spreadsheet if not provided.
- * @param {object} config The global configuration object.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function notifyError(subjectDetails, error, ss, config) {
   const props = PropertiesService.getScriptProperties();
@@ -76,12 +84,13 @@ function notifyError(subjectDetails, error, ss, config) {
 
 /**
  * Retrieves, creates, or falls back to the designated log spreadsheet.
- * The function first tries to open the spreadsheet using an ID stored in Script Properties.
- * If that fails, it attempts to create a new spreadsheet in the user's Drive.
- * If creation also fails (e.g., due to insufficient permissions), it defaults to using
- * the currently active spreadsheet as a last resort, ensuring that logging can always proceed.
+ * The function follows a resilient multi-step process:
+ * 1. Tries to open the spreadsheet using an ID stored in Script Properties.
+ * 2. If that fails, it attempts to create a new spreadsheet in the user's Drive.
+ * 3. If creation also fails (e.g., due to insufficient permissions), it defaults to using the currently active spreadsheet as a last resort.
+ * This ensures that logging can always proceed, even if the primary log sheet is unavailable.
  *
- * @param {object} config The global configuration object.
+ * @param {object} config The global configuration object (`CONFIG`).
  * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet} The log spreadsheet object.
  */
 function getOrCreateLogSpreadsheet(config) {
@@ -121,12 +130,12 @@ function getOrCreateLogSpreadsheet(config) {
 
 /**
  * Ensures that a sheet for the specified month exists in the log spreadsheet.
- * If the sheet doesn't exist, it creates and formats it with a header row.
- * Sheet names are based on a "YYYY-MM" key.
+ * If the sheet doesn't exist, it creates and formats it with a frozen header row.
+ * Sheet names are based on a standardized "YYYY-MM" key to ensure chronological sorting.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} logSS The spreadsheet where logs are stored.
- * @param {string} [monthKey] The month key (e.g., "2024-07"). Defaults to the current month.
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} The sheet for the specified month.
+ * @param {string} [monthKey] The month key to use (e.g., "2024-07"). Defaults to the current month if not provided.
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet} The sheet object for the specified month.
  */
 function ensureMonthlyLogSheet(logSS, monthKey) {
   // Use the padded month key for standardized log sheet names
@@ -148,8 +157,9 @@ function ensureMonthlyLogSheet(logSS, monthKey) {
 
 /**
  * Writes a detailed audit entry to the appropriate monthly log sheet.
- * This function orchestrates getting the log spreadsheet and the correct monthly sheet,
- * then appends a new row with the provided audit information.
+ * This function orchestrates getting the log spreadsheet, ensuring the correct monthly sheet exists,
+ * and appending a new row with the provided audit information. The log sheet is then sorted to
+ * keep the latest entries at the top.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} sourceSS The spreadsheet where the audited action occurred.
  * @param {object} entry An object containing the details of the log entry.
@@ -158,9 +168,10 @@ function ensureMonthlyLogSheet(logSS, monthKey) {
  * @param {number} [entry.sourceRow] The row number related to the action.
  * @param {string} [entry.projectName] The project name involved in the action.
  * @param {string} [entry.details] A description of what happened.
- * @param {string} [entry.result] The outcome of the action (e.g., "success", "skipped").
+ * @param {string} [entry.result] The outcome of the action (e.g., "success", "skipped", "error").
  * @param {string} [entry.errorMessage] Any error message if the action failed.
- * @param {object} config The global configuration object.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function logAudit(sourceSS, entry, config) {
   try {
@@ -202,10 +213,11 @@ function logAudit(sourceSS, entry, config) {
 
 /**
  * Sorts all monthly log sheets within the designated log spreadsheet.
- * This function is designed to be run by an `onOpen` trigger in the log spreadsheet.
- * It iterates through all sheets, finds any that match the "YYYY-MM" log sheet format,
- * and sorts them by timestamp (column 1) in descending order to keep the latest logs at the top.
- * This action ensures logs are always easy to review upon opening the spreadsheet.
+ * This function is designed to be run by an `onOpen` trigger in the log spreadsheet itself. It iterates through all sheets,
+ * finds any that match the "YYYY-MM" log sheet format, and sorts them by timestamp (column 1) in descending order.
+ * This action ensures that the latest logs are always at the top and easy to review.
+ *
+ * @returns {void} This function does not return a value.
  */
 function sortLogSheetsOnOpen() {
   try {

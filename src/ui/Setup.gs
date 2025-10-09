@@ -1,17 +1,23 @@
 /**
  * @OnlyCurrentDoc
+ *
  * Setup.gs
+ *
  * Handles UI menu creation (`onOpen`) and one-time installation routines for project features.
- * This script provides the primary user interface for manual script operations.
+ * This script provides the primary user interface for running manual script operations,
+ * such as initial setup, dashboard updates, and configuration.
+ *
+ * @version 1.0.0
+ * @release 2024-07-29
  */
 
 /**
  * An `onOpen` simple trigger that runs automatically when the spreadsheet is opened.
- * It creates a custom "🚀 Project Actions" menu in the Google Sheets UI and also
- * triggers the sorting of external log sheets, consolidating all `onOpen` actions.
+ * It creates a custom "🚀 Project Actions" menu in the Google Sheets UI and also triggers the
+ * sorting of external log sheets, consolidating all `onOpen` actions into a single function.
  *
- * @param {object} e The event object passed by the `onOpen` simple trigger.
- * @returns {void}
+ * @param {GoogleAppsScript.Events.SheetsOnOpen} e The event object passed by the `onOpen` simple trigger.
+ * @returns {void} This function does not return a value.
  */
 function onOpen(e) {
   // Run UI setup
@@ -37,11 +43,10 @@ function onOpen(e) {
 
 /**
  * A wrapper function to call `updateDashboard` from the custom menu.
- * This is a best practice in Apps Script, as calling a function directly from the UI
- * can sometimes lead to context or permission issues. This wrapper ensures the function
- * executes in the correct global context.
+ * This is an Apps Script best practice, as calling a function directly from the UI can sometimes
+ * lead to context or permission issues. This wrapper ensures the function executes in the correct global context.
  *
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function updateDashboard_wrapper() {
   updateDashboard();
@@ -49,10 +54,10 @@ function updateDashboard_wrapper() {
 
 /**
  * A wrapper function to call `initializeLastEditFormulas` from the custom menu.
- * It provides a clear success message to the user via a UI alert upon completion,
- * confirming that the backfill operation has finished.
+ * It provides a clear success message to the user via a UI alert upon completion, confirming
+ * that the formula backfill operation has finished.
  *
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function initializeLastEditFormulas_wrapper() {
   initializeLastEditFormulas();
@@ -63,12 +68,12 @@ function initializeLastEditFormulas_wrapper() {
 /**
  * The main, one-time setup routine for the entire project, executed from the custom menu.
  * This function is critical for new deployments or for repairing a broken installation. It performs:
- * 1. **Trigger Installation:** Idempotently installs the `onEdit` trigger required for automations.
+ * 1. **Trigger Installation:** Idempotently installs the `onEdit` trigger required for all automations.
  * 2. **Column Creation:** Ensures "Last Edit" tracking columns are present on all configured sheets.
- * 3. **Logging Initialization:** Sets up the external logging system.
- * It provides clear user feedback via UI alerts for both success and failure scenarios.
+ * 3. **Logging Initialization:** Sets up the external logging system, creating the log sheet if needed.
+ * It provides clear user feedback via UI alerts for both success and failure.
  *
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -100,12 +105,11 @@ function setup() {
 /**
  * Idempotently installs the required installable `onEdit` trigger for the spreadsheet.
  * "Idempotent" means that running this function multiple times will not create duplicate triggers.
- * It first scans all existing project triggers to see if one for the `onEdit` function already
- * exists. If not, it creates it. This is crucial for preventing automations from running
- * multiple times on a single edit.
+ * It first scans all existing project triggers to see if one for the `onEdit` function already exists.
+ * If not, it creates it. This is crucial for preventing automations from running multiple times on a single edit.
  *
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet to which the trigger will be attached.
- * @returns {void}
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The spreadsheet object to which the trigger will be attached.
+ * @returns {void} This function does not return a value.
  */
 function installOnEditTrigger(ss) {
   const triggers = ScriptApp.getProjectTriggers();
@@ -124,11 +128,11 @@ function installOnEditTrigger(ss) {
 
 /**
  * Prompts the user to set or update the email address for error notifications.
- * This function is called from the custom menu. It validates the user's input
- * to ensure it is a properly formatted email address before saving it to
- * Script Properties. It provides clear feedback to the user on success or failure.
+ * This function is called from the custom menu. It validates the user's input to ensure it is a
+ * properly formatted email address before saving it to Script Properties. It provides clear feedback
+ * to the user on both success and failure.
  *
- * @returns {void}
+ * @returns {void} This function does not return a value.
  */
 function setErrorNotificationEmail_wrapper() {
   const ui = SpreadsheetApp.getUi();
