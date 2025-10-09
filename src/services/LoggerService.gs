@@ -119,7 +119,10 @@ function getOrCreateLogSpreadsheet(config, correlationId) {
     return newSS;
   } catch (e2) {
     // If creation fails, this is a critical, unrecoverable error for logging.
-    throw new DependencyError("Failed to create a new log spreadsheet.", e2);
+    // **Bug Fix**: Add the specific underlying error message for better diagnostics.
+    const errorMessage = `Failed to create a new log spreadsheet. Underlying error: ${e2.message}`;
+    Logger.log(errorMessage); // Log the detailed error immediately for debugging.
+    throw new DependencyError(errorMessage, e2);
   }
 }
 
