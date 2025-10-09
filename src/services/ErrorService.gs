@@ -6,7 +6,7 @@
  * A centralized service for handling, logging, and reporting errors in a standardized way.
  * This service implements the strategy defined in the Error Handling RFC (docs/ERRORS.md).
  *
- * @version 1.0.0
+ * @version 1.1.0
  * @release 2025-10-08
  */
 

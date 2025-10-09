@@ -7,8 +7,8 @@
  * It is designed to be the robust backend for all data transfer operations, handling locking, duplicate checking,
  * flexible data mapping, and post-transfer actions like sorting.
  *
- * @version 1.0.0
- * @release 2024-07-29
+ * @version 1.1.0
+ * @release 2025-10-08
  */
 
 /**

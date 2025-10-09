@@ -7,8 +7,8 @@
  * It orchestrates data synchronization between sheets and triggers transfers based on specific cell edits.
  * The logic is rule-based, making it extensible for future automations.
  *
- * @version 1.0.0
- * @release 2024-07-29
+ * @version 1.1.0
+ * @release 2025-10-08
  */
 
 /**
