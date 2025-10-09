@@ -38,66 +38,59 @@ function onEdit(e) {
   const sheetName = sheet.getName();
   const editedCol = e.range.getColumn();
   const editedRow = e.range.getRow();
-
-  // The only function that should access the global CONFIG.
+  const correlationId = Utilities.getUuid(); // For tracing
   const config = CONFIG;
 
-  // 1. Batch-read the entire edited row once for performance.
-  const sourceRowData = sheet.getRange(editedRow, 1, 1, sheet.getMaxColumns()).getValues()[0];
+  try {
+    // 1. Batch-read the entire edited row once for performance, with retry.
+    const sourceRowData = withRetry(
+      () => sheet.getRange(editedRow, 1, 1, sheet.getMaxColumns()).getValues()[0],
+      { functionName: "onEdit:readSourceRow", correlationId: correlationId }
+    );
 
-  // 2. Always update Last Edit tracking if applicable. This runs independently of other rules.
-  if (config.LAST_EDIT.TRACKED_SHEETS.includes(sheetName)) {
-    updateLastEditForRow(sheet, editedRow, config);
-    // Also log this edit to the audit trail for accountability.
-    try {
+    // 2. Always update Last Edit tracking if applicable.
+    if (config.LAST_EDIT.TRACKED_SHEETS.includes(sheetName)) {
+      updateLastEditForRow(sheet, editedRow, config);
       const a1Notation = e.range.getA1Notation ? e.range.getA1Notation() : 'unknown';
       logAudit(e.source, {
+        correlationId: correlationId,
         action: 'Row Edit',
         sourceSheet: sheetName,
         sourceRow: editedRow,
         details: `Cell ${a1Notation} updated. New value: "${e.value}"`,
         result: 'success'
       }, config);
-    } catch (logError) {
-      Logger.log(`Failed to write audit log for edit on ${sheetName} R${editedRow}: ${logError}`);
     }
-  }
 
-  // 3. Route the edit event to the appropriate handler based on a set of rules.
-  const { FORECASTING, UPCOMING } = config.SHEETS;
-  const FC = config.FORECASTING_COLS;
-  const UP = config.UPCOMING_COLS;
-  const STATUS = config.STATUS_STRINGS;
+    // 3. Route the edit event to the appropriate handler based on a set of rules.
+    const { FORECASTING, UPCOMING } = config.SHEETS;
+    const FC = config.FORECASTING_COLS;
+    const UP = config.UPCOMING_COLS;
+    const STATUS = config.STATUS_STRINGS;
 
-  const rules = [
-    { sheet: FORECASTING, col: FC.PROGRESS, handler: handleSyncAndPotentialFramingTransfer },
-    { sheet: UPCOMING, col: UP.PROGRESS, handler: triggerSyncToForecasting },
-    { sheet: FORECASTING, col: FC.PERMITS, valueCheck: (val) => normalizeString(val) === STATUS.PERMIT_APPROVED.toLowerCase(), handler: triggerUpcomingTransfer },
-    { sheet: FORECASTING, col: FC.DELIVERED, valueCheck: (val) => isTrueLike(val), handler: triggerInventoryTransfer },
-  ];
+    const rules = [
+      { sheet: FORECASTING, col: FC.PROGRESS, handler: handleSyncAndPotentialFramingTransfer },
+      { sheet: UPCOMING, col: UP.PROGRESS, handler: triggerSyncToForecasting },
+      { sheet: FORECASTING, col: FC.PERMITS, valueCheck: (val) => normalizeString(val) === STATUS.PERMIT_APPROVED.toLowerCase(), handler: triggerUpcomingTransfer },
+      { sheet: FORECASTING, col: FC.DELIVERED, valueCheck: (val) => isTrueLike(val), handler: triggerInventoryTransfer },
+    ];
 
-  // Execute the first matching rule.
-  for (const rule of rules) {
-    if (sheetName === rule.sheet && editedCol === rule.col) {
-      if (!rule.valueCheck || rule.valueCheck(e.value)) {
-        try {
-          // Pass the pre-read row data and the config object to the handler.
-          rule.handler(e, sourceRowData, config);
-        } catch (error) {
-          Logger.log(`Handler error for ${rule.sheet} Col ${rule.col}: ${error}\n${error.stack}`);
-          notifyError(`Handler failed for ${rule.sheet} Col ${rule.col}`, error, e.source, config);
-          logAudit(e.source, {
-            action: "HandlerError",
-            sourceSheet: sheetName,
-            sourceRow: editedRow,
-            details: `Col ${editedCol}`,
-            result: "error",
-            errorMessage: String(error)
-          }, config);
+    for (const rule of rules) {
+      if (sheetName === rule.sheet && editedCol === rule.col) {
+        if (!rule.valueCheck || rule.valueCheck(e.value)) {
+          // Pass all necessary context to the handler.
+          rule.handler(e, sourceRowData, config, correlationId);
+          return; // Stop after the first matching rule.
         }
-        return; // Stop after the first matching rule.
       }
     }
+  } catch (error) {
+    handleError(error, {
+      correlationId: correlationId,
+      functionName: "onEdit",
+      spreadsheet: e.source,
+      extra: { sheetName: sheetName, editedCol: editedCol, editedRow: editedRow }
+    }, config);
   }
 }
 
@@ -113,24 +106,22 @@ function onEdit(e) {
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
- * @returns {void} This function does not return a value.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  */
-function handleSyncAndPotentialFramingTransfer(e, sourceRowData, config) {
+function handleSyncAndPotentialFramingTransfer(e, sourceRowData, config, correlationId) {
   const FC = config.FORECASTING_COLS;
-
-  // Use the pre-read data instead of making new I/O calls.
   const sfid = sourceRowData[FC.SFID - 1];
   const projectName = sourceRowData[FC.PROJECT_NAME - 1];
   const newValue = e.value;
 
   // 1. Synchronization.
   if (sfid || projectName) {
-    syncProgressToUpcoming(sfid, projectName, newValue, e.source, e, config);
+    syncProgressToUpcoming(sfid, projectName, newValue, e.source, e, config, correlationId);
   }
 
   // 2. Conditional Transfer to Framing.
   if (normalizeString(newValue) === config.STATUS_STRINGS.IN_PROGRESS.toLowerCase()) {
-    triggerFramingTransfer(e, sourceRowData, config);
+    triggerFramingTransfer(e, sourceRowData, config, correlationId);
   }
 }
 
@@ -141,24 +132,20 @@ function handleSyncAndPotentialFramingTransfer(e, sourceRowData, config) {
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Upcoming' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
- * @returns {void} This function does not return a value.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  */
-function triggerSyncToForecasting(e, sourceRowData, config) {
+function triggerSyncToForecasting(e, sourceRowData, config, correlationId) {
   const UP = config.UPCOMING_COLS;
-
-  // Use the pre-read data.
   const sfid = sourceRowData[UP.SFID - 1];
   const projectName = sourceRowData[UP.PROJECT_NAME - 1];
 
   if (sfid || projectName) {
-    syncProgressToForecasting(sfid, projectName, e.value, e.source, e, config);
+    syncProgressToForecasting(sfid, projectName, e.value, e.source, e, config, correlationId);
   }
 }
 
 /**
  * Synchronizes the 'Progress' value from the 'Forecasting' sheet to the 'Upcoming' sheet.
- * It finds the matching project row using SFID or Project Name and updates its 'Progress' cell.
- * A script lock is used to prevent race conditions from concurrent edits.
  *
  * @param {string} sfid The Salesforce ID of the project to sync.
  * @param {string} projectName The name of the project, used as a fallback if SFID is not available.
@@ -166,45 +153,45 @@ function triggerSyncToForecasting(e, sourceRowData, config) {
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The active spreadsheet object.
  * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original `onEdit` event context, used for logging purposes.
  * @param {object} config The global configuration object (`CONFIG`).
- * @returns {void} This function does not return a value.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  */
-function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config) {
+function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config, correlationId) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
   const { UPCOMING } = config.SHEETS;
   const UP = config.UPCOMING_COLS;
   const actionName = "SyncFtoU";
-  const logIdentifier = sfid ? `SFID ${sfid}` : `"${projectName}"`;
 
   try {
-    lockAcquired = acquireLockWithRetry(lock);
-    if (!lockAcquired) {
-      Logger.log(`${actionName}: Lock not acquired for ${logIdentifier} after multiple retries. Skipping.`);
-      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" }, config);
-      return;
-    }
+    withRetry(() => {
+      lockAcquired = lock.tryLock(1000);
+      if (!lockAcquired) throw new Error("Lock not acquired for sync.");
+    }, { functionName: `${actionName}:acquireLock`, correlationId: correlationId });
 
     const upcomingSheet = ss.getSheetByName(UPCOMING);
-    if (!upcomingSheet) throw new Error(`Destination sheet "${UPCOMING}" not found`);
+    if (!upcomingSheet) throw new ConfigurationError(`Destination sheet "${UPCOMING}" not found`);
 
     const row = findRowByBestIdentifier(upcomingSheet, sfid, UP.SFID, projectName, UP.PROJECT_NAME);
 
     if (row !== -1) {
       const targetCell = upcomingSheet.getRange(row, UP.PROGRESS);
       if (normalizeForComparison(targetCell.getValue()) !== normalizeForComparison(newValue)) {
-        targetCell.setValue(newValue);
+        withRetry(() => targetCell.setValue(newValue), { functionName: `${actionName}:setValue`, correlationId: correlationId });
         updateLastEditForRow(upcomingSheet, row, config);
-        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" }, config);
+        logAudit(ss, { correlationId, action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid, projectName, details: `Progress -> ${newValue}`, result: "updated" }, config);
       } else {
-        logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" }, config);
+        logAudit(ss, { correlationId, action: actionName, sourceSheet: UPCOMING, sourceRow: row, sfid, projectName, details: "No change", result: "noop" }, config);
       }
     } else {
-      logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, details: "Project not found", result: "miss" }, config);
+      logAudit(ss, { correlationId, action: actionName, sourceSheet: UPCOMING, sfid, projectName, details: "Project not found", result: "miss" }, config);
     }
   } catch (error) {
-    Logger.log(`${actionName} error for ${logIdentifier}: ${error}\n${error.stack}`);
-    notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss, config);
-    logAudit(ss, { action: actionName, sourceSheet: UPCOMING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) }, config);
+    handleError(error, {
+      correlationId: correlationId,
+      functionName: actionName,
+      spreadsheet: ss,
+      extra: { sfid, projectName }
+    }, config);
   } finally {
     if (lockAcquired) lock.releaseLock();
   }
@@ -212,8 +199,6 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config) {
 
 /**
  * Synchronizes the 'Progress' value from the 'Upcoming' sheet back to the 'Forecasting' sheet.
- * It finds the matching project row using SFID or Project Name and updates its 'Progress' cell.
- * A script lock is used to prevent race conditions from concurrent edits.
  *
  * @param {string} sfid The Salesforce ID of the project to sync.
  * @param {string} projectName The name of the project, used as a fallback if SFID is not available.
@@ -221,45 +206,45 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config) {
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The active spreadsheet object.
  * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original `onEdit` event context, used for logging purposes.
  * @param {object} config The global configuration object (`CONFIG`).
- * @returns {void} This function does not return a value.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  */
-function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config) {
+function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config, correlationId) {
   const lock = LockService.getScriptLock();
   let lockAcquired = false;
   const { FORECASTING } = config.SHEETS;
   const FC = config.FORECASTING_COLS;
   const actionName = "SyncUtoF";
-  const logIdentifier = sfid ? `SFID ${sfid}` : `"${projectName}"`;
 
   try {
-    lockAcquired = acquireLockWithRetry(lock);
-    if (!lockAcquired) {
-      Logger.log(`${actionName}: Lock not acquired for ${logIdentifier} after multiple retries. Skipping.`);
-      logAudit(ss, { action: `${actionName}-SkippedNoLock`, sourceSheet: eCtx.range.getSheet().getName(), sourceRow: eCtx.range.getRow(), sfid: sfid, projectName: projectName, result: "skipped" }, config);
-      return;
-    }
+    withRetry(() => {
+      lockAcquired = lock.tryLock(1000);
+      if (!lockAcquired) throw new Error("Lock not acquired for sync.");
+    }, { functionName: `${actionName}:acquireLock`, correlationId: correlationId });
 
     const forecastingSheet = ss.getSheetByName(FORECASTING);
-    if (!forecastingSheet) throw new Error(`Destination sheet "${FORECASTING}" not found`);
+    if (!forecastingSheet) throw new ConfigurationError(`Destination sheet "${FORECASTING}" not found`);
 
     const row = findRowByBestIdentifier(forecastingSheet, sfid, FC.SFID, projectName, FC.PROJECT_NAME);
 
     if (row !== -1) {
       const targetCell = forecastingSheet.getRange(row, FC.PROGRESS);
       if (normalizeForComparison(targetCell.getValue()) !== normalizeForComparison(newValue)) {
-        targetCell.setValue(newValue);
+        withRetry(() => targetCell.setValue(newValue), { functionName: `${actionName}:setValue`, correlationId: correlationId });
         updateLastEditForRow(forecastingSheet, row, config);
-        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: `Progress -> ${newValue}`, result: "updated" }, config);
+        logAudit(ss, { correlationId, action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid, projectName, details: `Progress -> ${newValue}`, result: "updated" }, config);
       } else {
-        logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid: sfid, projectName: projectName, details: "No change", result: "noop" }, config);
+        logAudit(ss, { correlationId, action: actionName, sourceSheet: FORECASTING, sourceRow: row, sfid, projectName, details: "No change", result: "noop" }, config);
       }
     } else {
-      logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, details: "Project not found", result: "miss" }, config);
+      logAudit(ss, { correlationId, action: actionName, sourceSheet: FORECASTING, sfid, projectName, details: "Project not found", result: "miss" }, config);
     }
   } catch (error) {
-    Logger.log(`${actionName} error for ${logIdentifier}: ${error}\n${error.stack}`);
-    notifyError(`${actionName} failed for project ${logIdentifier}`, error, ss, config);
-    logAudit(ss, { action: actionName, sourceSheet: FORECASTING, sfid: sfid, projectName: projectName, result: "error", errorMessage: String(error) }, config);
+    handleError(error, {
+      correlationId: correlationId,
+      functionName: actionName,
+      spreadsheet: ss,
+      extra: { sfid, projectName }
+    }, config);
   } finally {
     if (lockAcquired) lock.releaseLock();
   }
@@ -271,16 +256,13 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config
 
 /**
  * Defines and triggers the transfer of a project row from 'Forecasting' to 'Upcoming'.
- * This transfer is initiated when the 'Permits' status in the 'Forecasting' sheet is updated to 'Permit Approved'.
- * It constructs a configuration object for the `executeTransfer` engine, specifying the destination sheet,
- * column mappings, duplicate check rules, and post-transfer actions (sorting).
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
- * @returns {void} This function does not return a value.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  */
-function triggerUpcomingTransfer(e, sourceRowData, config) {
+function triggerUpcomingTransfer(e, sourceRowData, config, correlationId) {
   const FC = config.FORECASTING_COLS;
   const UP = config.UPCOMING_COLS;
 
@@ -302,21 +284,18 @@ function triggerUpcomingTransfer(e, sourceRowData, config) {
       sort: true, sortColumn: UP.DEADLINE, sortAscending: false
     }
   };
-  executeTransfer(e, transferConfig, sourceRowData);
+  executeTransfer(e, transferConfig, sourceRowData, correlationId);
 }
 
 /**
  * Defines and triggers the transfer of a project row from 'Forecasting' to 'Inventory_Elevators'.
- * This transfer is initiated when the 'Delivered' checkbox in the 'Forecasting' sheet is marked as `TRUE`.
- * It constructs a configuration object for the `executeTransfer` engine, specifying the destination sheet,
- * column mappings, and duplicate check rules.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
- * @returns {void} This function does not return a value.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  */
-function triggerInventoryTransfer(e, sourceRowData, config) {
+function triggerInventoryTransfer(e, sourceRowData, config, correlationId) {
   const FC = config.FORECASTING_COLS;
   const INV = config.INVENTORY_COLS;
 
@@ -333,21 +312,18 @@ function triggerInventoryTransfer(e, sourceRowData, config) {
       projectNameSourceCol: FC.PROJECT_NAME, projectNameDestCol: INV.PROJECT_NAME
     }
   };
-  executeTransfer(e, transferConfig, sourceRowData);
+  executeTransfer(e, transferConfig, sourceRowData, correlationId);
 }
 
 /**
  * Defines and triggers the transfer of a project row from 'Forecasting' to 'Framing'.
- * This transfer is initiated when the 'Progress' status in the 'Forecasting' sheet is updated to 'In Progress'.
- * It constructs a configuration object for the `executeTransfer` engine, specifying the destination sheet,
- * column mappings, and a compound duplicate check rule (SFID/Project Name + Deadline).
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
- * @returns {void} This function does not return a value.
+ * @param {string} correlationId A unique ID for tracing the entire operation.
  */
-function triggerFramingTransfer(e, sourceRowData, config) {
+function triggerFramingTransfer(e, sourceRowData, config, correlationId) {
   const FC = config.FORECASTING_COLS;
   const FR = config.FRAMING_COLS;
 
@@ -367,5 +343,5 @@ function triggerFramingTransfer(e, sourceRowData, config) {
       keySeparator: "|"
     }
   };
-  executeTransfer(e, transferConfig, sourceRowData);
+  executeTransfer(e, transferConfig, sourceRowData, correlationId);
 }
