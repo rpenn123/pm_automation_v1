@@ -70,7 +70,8 @@ function executeTransfer(e, config, preReadSourceRowData, correlationId) {
     } else {
       const mappedSourceCols = Object.keys(config.destinationColumnMapping || {}).map(Number);
       const compoundKeyCols = (config.duplicateCheckConfig && config.duplicateCheckConfig.compoundKeySourceCols) || [];
-      const maxSourceColNeeded = Math.max(...(config.sourceColumnsNeeded || []), ...mappedSourceCols, ...compoundKeyCols);
+      const dupCheckCols = (config.duplicateCheckConfig && [config.duplicateCheckConfig.sfidSourceCol, config.duplicateCheckConfig.projectNameSourceCol]) || [];
+      const maxSourceColNeeded = Math.max(...(config.sourceColumnsNeeded || []), ...mappedSourceCols, ...compoundKeyCols, ...dupCheckCols);
       const actualLastSourceCol = sourceSheet.getMaxColumns();
       readWidth = Math.min(maxSourceColNeeded, actualLastSourceCol);
 
