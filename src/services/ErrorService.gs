@@ -15,12 +15,13 @@
 // =================================================================
 
 /**
- * Base error class for all custom application errors.
- * Note: Google Apps Script's Rhino runtime does not support ES6 classes,
- * so we use constructor functions and prototype inheritance.
+ * Base error class for all custom application errors, providing a common foundation for naming and stack tracing.
+ * Note: Google Apps Script's Rhino runtime does not fully support ES6 classes,
+ * so this project uses constructor functions and prototype inheritance for custom errors.
  *
- * @param {string} message The error message.
- * @param {Error} [cause] The original error that caused this one.
+ * @param {string} message The primary error message.
+ * @param {Error} [cause] The underlying error that caused this one, used for chaining.
+ * @constructor
  */
 function BaseError(message, cause) {
   this.name = this.constructor.name;
@@ -32,9 +33,12 @@ BaseError.prototype = Object.create(Error.prototype);
 BaseError.prototype.constructor = BaseError;
 
 /**
- * Represents an error due to invalid input data. Not retryable.
- * @param {string} message The error message.
- * @param {Error} [cause] The original error.
+ * Represents an error due to invalid or missing input data (e.g., a required SFID is missing).
+ * These errors are generally not retryable as they indicate a data problem that needs manual correction.
+ *
+ * @param {string} message The validation-specific error message.
+ * @param {Error} [cause] The underlying error, if any.
+ * @constructor
  */
 function ValidationError(message, cause) {
   BaseError.call(this, message, cause);
@@ -43,9 +47,12 @@ ValidationError.prototype = Object.create(BaseError.prototype);
 ValidationError.prototype.constructor = ValidationError;
 
 /**
- * Represents an error from an external service (e.g., Google Sheets API).
- * @param {string} message The error message.
- * @param {Error} [cause] The original error.
+ * Represents an error originating from an external service or dependency (e.g., Google Sheets API, LockService).
+ * These may or may not be retryable. For explicitly retryable dependency errors, use `TransientError`.
+ *
+ * @param {string} message The dependency-related error message.
+ * @param {Error} [cause] The original error from the external service.
+ * @constructor
  */
 function DependencyError(message, cause) {
   BaseError.call(this, message, cause);
@@ -54,9 +61,12 @@ DependencyError.prototype = Object.create(BaseError.prototype);
 DependencyError.prototype.constructor = DependencyError;
 
 /**
- * A sub-type of DependencyError that is known to be temporary and retryable.
- * @param {string} message The error message.
- * @param {Error} [cause] The original error.
+ * A sub-type of `DependencyError` that is known to be temporary and suitable for retrying.
+ * This is used for issues like API rate limits, network timeouts, or temporary lock contention.
+ *
+ * @param {string} message The transient error message.
+ * @param {Error} [cause] The original, underlying transient error.
+ * @constructor
  */
 function TransientError(message, cause) {
   DependencyError.call(this, message, cause);
@@ -65,8 +75,11 @@ TransientError.prototype = Object.create(DependencyError.prototype);
 TransientError.prototype.constructor = TransientError;
 
 /**
- * Represents an error in the application's configuration. Not retryable.
- * @param {string} message The error message.
+ * Represents an error in the application's configuration (e.g., a required sheet name in `Config.gs` is incorrect).
+ * These errors are not retryable and indicate a problem that requires a code or configuration fix.
+ *
+ * @param {string} message The configuration-specific error message.
+ * @constructor
  */
 function ConfigurationError(message) {
   BaseError.call(this, message);
@@ -80,16 +93,19 @@ ConfigurationError.prototype.constructor = ConfigurationError;
 // =================================================================
 
 /**
- * Centralized function for handling all caught errors.
- * It logs the error in a structured format and can send notifications for critical issues.
+ * Centralized function for handling all caught errors throughout the application.
+ * It logs the error in a structured JSON format to the script's execution logs and sends an email
+ * notification via `notifyError` for critical issues. Non-critical errors, like `ValidationError`,
+ * are logged as warnings and do not trigger notifications.
  *
  * @param {Error} error The error object that was caught.
- * @param {object} context An object containing contextual information.
- * @param {string} context.correlationId A unique ID for tracing the operation.
- * @param {string} context.functionName The name of the function where the error occurred.
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [context.spreadsheet] The spreadsheet object.
- * @param {object} [context.extra] Any other relevant details (e.g., sheetName, row, sfid).
+ * @param {object} context An object containing contextual information about the error's origin.
+ * @param {string} context.correlationId A unique ID for tracing the entire operation end-to-end.
+ * @param {string} context.functionName The name of the function where the error was caught.
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [context.spreadsheet] The spreadsheet where the error occurred.
+ * @param {object} [context.extra] A free-form object for any other relevant details (e.g., sheetName, row, sfid).
  * @param {object} config The global configuration object (`CONFIG`).
+ * @returns {void} This function does not return a value.
  */
 function handleError(error, context, config) {
   try {
@@ -136,16 +152,19 @@ function handleError(error, context, config) {
 // =================================================================
 
 /**
- * Wraps a function call with a retry mechanism featuring exponential backoff and jitter.
- * This is designed for I/O operations that might fail due to transient issues.
+ * Wraps a function call with a robust retry mechanism, featuring exponential backoff and jitter.
+ * This utility is essential for making I/O operations (like API calls to Google Sheets) more resilient
+ * to transient issues such as network flakes or temporary API unavailability. It will not retry on
+ * non-transient errors like `ValidationError` or `ConfigurationError`.
  *
- * @param {function} fn The function to execute and retry on failure.
- * @param {object} options Configuration for the retry mechanism.
- * @param {string} options.functionName A name for the operation, for logging purposes.
- * @param {number} [options.maxRetries=3] The maximum number of retries.
- * @param {number} [options.initialDelayMs=200] The initial delay before the first retry.
- * @returns {any} The return value of the wrapped function if successful.
- * @throws {DependencyError} If the function fails after all retries.
+ * @param {function(): any} fn The function to execute. It should return a value or throw an error on failure.
+ * @param {object} options Configuration options for the retry behavior.
+ * @param {string} options.functionName A descriptive name for the operation, used in log messages.
+ * @param {number} [options.maxRetries=3] The maximum number of times to retry the function.
+ * @param {number} [options.initialDelayMs=200] The base delay in milliseconds for the first retry. Subsequent retries use exponential backoff.
+ * @returns {any} The return value of the wrapped function (`fn`) if it succeeds.
+ * @throws {DependencyError} If the function continues to fail after all retry attempts have been exhausted.
+ * @throws {ValidationError|ConfigurationError} If the function throws a non-retryable error, it is re-thrown immediately without a retry attempt.
  */
 function withRetry(fn, options) {
   const { functionName, maxRetries = 3, initialDelayMs = 200 } = options;

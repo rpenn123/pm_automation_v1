@@ -21,6 +21,7 @@
  * @param {string} config.transferName A descriptive name for the transfer, used for logging (e.g., "Upcoming Transfer").
  * @param {string} config.destinationSheetName The name of the sheet to which data will be transferred.
  * @param {Object<number, number>} config.destinationColumnMapping An object mapping source column indices (keys) to destination column indices (values).
+ * @param {any[]} [config.sourceColumnsNeeded] An array of all source columns required for the transfer, used to optimize the initial data read.
  * @param {string[]} [config.lastEditTrackedSheets] An array of sheet names where "Last Edit" timestamps should be updated.
  * @param {object} [config.duplicateCheckConfig] Configuration for preventing duplicate entries. If omitted, no duplicate check is performed.
  * @param {boolean} [config.duplicateCheckConfig.checkEnabled=true] If `false`, the duplicate check is skipped.
@@ -35,7 +36,7 @@
  * @param {boolean} [config.postTransferActions.sort=false] If `true`, sorts the destination sheet after appending the new row.
  * @param {number} [config.postTransferActions.sortColumn] The 1-based column index to sort by.
  * @param {boolean} [config.postTransferActions.sortAscending] If `true`, sorts in ascending order; otherwise, descending.
- * @param {any[]} [preReadSourceRowData] Optional. The pre-read data from the source row to avoid another I/O call. If not provided, the function will read it.
+ * @param {any[]} preReadSourceRowData Optional. The pre-read data from the source row to avoid another I/O call. If not provided, the function will read it.
  * @param {string} correlationId A unique ID for tracing the entire operation.
  * @returns {void} This function does not return a value.
  */
@@ -200,11 +201,12 @@ function executeTransfer(e, config, preReadSourceRowData, correlationId) {
 /**
  * Performs a robust duplicate check in the destination sheet using an SFID-first strategy.
  * This helper function for `executeTransfer` is critical for data integrity. It uses two main strategies:
- * 1.  **SFID Check (Primary):** If a non-empty `sfid` is provided, it performs a fast, exact-match search on the destination SFID column.
+ * 1.  **SFID Check (Primary):** If a non-empty `sfid` is provided, it performs a fast, exact-match search on the destination SFID column. This is the most reliable method.
  * 2.  **Compound Key Check (Fallback):** If no SFID is available, it constructs a unique key from the Project Name plus any additional columns
- *     defined in `compoundKeySourceCols`. This maintains compatibility with legacy data that may not have an SFID.
+ *     defined in `compoundKeySourceCols`. This maintains compatibility with legacy data that may not have an SFID and handles cases where uniqueness
+ *     depends on multiple fields (e.g., Project Name + Deadline).
  *     **Note on Bug Fix:** The compound key generation previously used `formatValueForKey`, which incorrectly treated date-like strings
- *     as dates. It now uses `normalizeString` to ensure all parts of the key are compared as simple strings.
+ *     as dates. It now uses `normalizeString` to ensure all parts of the key are compared as simple strings, preventing false matches.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} destinationSheet The sheet object where duplicates will be checked.
  * @param {string|null} sfid The Salesforce ID from the source row. This is the preferred unique identifier.

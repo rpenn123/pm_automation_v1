@@ -12,9 +12,10 @@
  */
 
 /**
- * An `onOpen` simple trigger that runs automatically when the spreadsheet is opened.
- * It creates a custom "🚀 Project Actions" menu in the Google Sheets UI and also triggers the
- * sorting of external log sheets, consolidating all `onOpen` actions into a single function.
+ * An `onOpen` simple trigger that runs automatically every time the spreadsheet is opened.
+ * It creates a custom "🚀 Project Actions" menu in the Google Sheets UI, providing users with easy access
+ * to the script's main functions. It also triggers the sorting of external log sheets, consolidating all
+ * `onOpen` actions into a single, efficient function.
  *
  * @param {GoogleAppsScript.Events.SheetsOnOpen} e The event object passed by the `onOpen` simple trigger.
  * @returns {void} This function does not return a value.
@@ -43,10 +44,10 @@ function onOpen(e) {
 
 /**
  * A wrapper function to call `updateDashboard` from the custom menu.
- * This is an Apps Script best practice, as calling a function directly from the UI can sometimes
+ * This is an Apps Script best practice, as calling a function directly from a menu item can sometimes
  * lead to context or permission issues. This wrapper ensures the function executes in the correct global context.
  *
- * @returns {void} This function does not return a value.
+ * @returns {void} This function does not return a value; it triggers the dashboard update.
  */
 function updateDashboard_wrapper() {
   updateDashboard();
@@ -55,9 +56,9 @@ function updateDashboard_wrapper() {
 /**
  * A wrapper function to call `initializeLastEditFormulas` from the custom menu.
  * It provides a clear success message to the user via a UI alert upon completion, confirming
- * that the formula backfill operation has finished.
+ * that the formula backfill operation has finished. This improves the user experience by providing explicit feedback.
  *
- * @returns {void} This function does not return a value.
+ * @returns {void} This function does not return a value; it triggers the formula initialization.
  */
 function initializeLastEditFormulas_wrapper() {
   initializeLastEditFormulas();
@@ -66,14 +67,14 @@ function initializeLastEditFormulas_wrapper() {
 
 
 /**
- * The main, one-time setup routine for the entire project, executed from the custom menu.
- * This function is critical for new deployments or for repairing a broken installation. It performs:
- * 1. **Trigger Installation:** Idempotently installs the `onEdit` trigger required for all automations.
- * 2. **Column Creation:** Ensures "Last Edit" tracking columns are present on all configured sheets.
- * 3. **Logging Initialization:** Sets up the external logging system, creating the log sheet if needed.
+ * The main, one-time setup routine for the entire project, intended to be executed from the custom menu.
+ * This function is critical for new deployments or for repairing a broken installation. It performs three key actions:
+ * 1. **Trigger Installation:** Idempotently installs the `onEdit` trigger required for all sheet automations.
+ * 2. **Column Creation:** Ensures that the "Last Edit" tracking columns are present on all configured sheets.
+ * 3. **Logging Initialization:** Sets up the external logging system by creating the log spreadsheet if it doesn't exist.
  * It provides clear user feedback via UI alerts for both success and failure.
  *
- * @returns {void} This function does not return a value.
+ * @returns {void} This function does not return a value; it configures the project environment.
  */
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -127,12 +128,12 @@ function installOnEditTrigger(ss) {
 }
 
 /**
- * Prompts the user to set or update the email address for error notifications.
- * This function is called from the custom menu. It validates the user's input to ensure it is a
- * properly formatted email address before saving it to Script Properties. It provides clear feedback
- * to the user on both success and failure.
+ * Prompts the user to set or update the email address for receiving error notifications.
+ * This function is called from the custom menu. It displays a dialog box showing the currently configured email
+ * and prompts for a new one. It validates the user's input to ensure it is a properly formatted email address
+ * before saving it to `ScriptProperties`. It provides clear UI feedback to the user on both success and failure.
  *
- * @returns {void} This function does not return a value.
+ * @returns {void} This function does not return a value; it modifies `ScriptProperties` based on user input.
  */
 function setErrorNotificationEmail_wrapper() {
   const ui = SpreadsheetApp.getUi();

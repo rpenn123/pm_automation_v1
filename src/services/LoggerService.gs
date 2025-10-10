@@ -13,14 +13,15 @@
 
 /**
  * Sends a formatted email notification when a critical error occurs.
- * This function constructs a detailed HTML email with the error message, stack trace, and spreadsheet context.
- * It includes a plain text fallback for email clients that do not support HTML. It will not send an email
- * if no valid recipient is configured in Script Properties.
+ * This function, called by the central `handleError` service, constructs a detailed HTML email with the
+ * error message, stack trace, and spreadsheet context. It includes a plain text fallback for email clients
+ * that do not support HTML. It will not send an email if a valid recipient is not configured in Script Properties,
+ * preventing errors if the setup is incomplete.
  *
- * @param {string} subjectDetails A brief description of the error context (e.g., "Dashboard Update Failed").
- * @param {Error} error The JavaScript `Error` object that was caught.
+ * @param {string} subjectDetails A brief, human-readable description of the error context (e.g., "Dashboard Update Failed").
+ * @param {Error} error The JavaScript `Error` object that was caught, used to populate the message and stack trace.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} [ss] The spreadsheet where the error occurred. Defaults to the active spreadsheet if not provided.
- * @param {object} config The global configuration object (`CONFIG`).
+ * @param {object} config The global configuration object (`CONFIG`), used to get the app name and property keys.
  * @returns {void} This function does not return a value.
  */
 function notifyError(subjectDetails, error, ss, config) {
@@ -88,14 +89,16 @@ function notifyError(subjectDetails, error, ss, config) {
 }
 
 /**
- * Retrieves or creates the designated log spreadsheet.
- * This function is resilient, attempting to open by ID, then create, but will throw
- * a `DependencyError` if it cannot secure a log spreadsheet, removing the fallback to the active sheet.
+ * Retrieves or creates the designated external log spreadsheet, demonstrating a self-healing pattern.
+ * It first tries to open the log spreadsheet using an ID stored in `PropertiesService`. If the ID is invalid
+ * or the spreadsheet has been deleted, it catches the error, deletes the invalid property, and proceeds to
+ * create a new log spreadsheet. The new ID is then stored for future use. This makes the logging system
+ * resilient to accidental deletion of the log file.
  *
  * @param {object} config The global configuration object (`CONFIG`).
- * @param {string} correlationId The correlation ID for tracing.
+ * @param {string} correlationId The correlation ID for tracing the operation, though it is not directly used here, it's passed for context.
  * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet} The log spreadsheet object.
- * @throws {DependencyError} If the log spreadsheet cannot be opened or created.
+ * @throws {DependencyError} If the log spreadsheet cannot be opened (due to permissions) or created.
  */
 function getOrCreateLogSpreadsheet(config, correlationId) {
   const props = PropertiesService.getScriptProperties();
@@ -127,13 +130,14 @@ function getOrCreateLogSpreadsheet(config, correlationId) {
 }
 
 /**
- * Ensures that a sheet for the specified month exists in the log spreadsheet.
- * If the sheet doesn't exist, it creates and formats it with a frozen header row,
- * now including a `CorrelationId` column for traceability.
+ * Ensures that a sheet for the specified month exists in the log spreadsheet, creating and formatting it if necessary.
+ * Log sheets are named with a "YYYY-MM" key for chronological organization. If a sheet for the given `monthKey`
+ * doesn't exist, this function creates it and adds a formatted, frozen header row with all the required log columns.
+ * This function is idempotent.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} logSS The spreadsheet where logs are stored.
  * @param {string} [monthKey] The month key to use (e.g., "2024-07"). Defaults to the current month if not provided.
- * @returns {GoogleAppsScript.Spreadsheet.Sheet} The sheet object for the specified month.
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet} The existing or newly created sheet object for the specified month.
  */
 function ensureMonthlyLogSheet(logSS, monthKey) {
   // Use the padded month key for standardized log sheet names
@@ -155,19 +159,20 @@ function ensureMonthlyLogSheet(logSS, monthKey) {
 
 /**
  * Writes a detailed audit entry to the appropriate monthly log sheet.
- * This function now requires a `correlationId` and includes it in the log entry,
- * enhancing traceability across all logged actions.
+ * This is the primary function for recording all significant application events. It ensures the log spreadsheet
+ * and current monthly sheet exist, then appends a new row with all the provided details. A `correlationId` is
+ * required to ensure all related log entries from a single operation can be traced.
  *
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} sourceSS The spreadsheet where the audited action occurred.
  * @param {object} entry An object containing the details of the log entry.
- * @param {string} entry.correlationId A unique ID to trace the entire operation.
- * @param {string} entry.action The name of the action being logged (e.g., "SyncFtoU").
+ * @param {string} entry.correlationId A unique ID used to trace a single end-to-end operation.
+ * @param {string} entry.action The name of the action being logged (e.g., "SyncFtoU", "Upcoming Transfer").
  * @param {string} [entry.sourceSheet] The name of the sheet where the action was initiated.
  * @param {number} [entry.sourceRow] The row number related to the action.
  * @param {string} [entry.projectName] The project name involved in the action.
- * @param {string} [entry.details] A description of what happened.
- * @param {string} [entry.result] The outcome of the action (e.g., "success", "skipped", "error").
- * @param {string} [entry.errorMessage] Any error message if the action failed.
+ * @param {string} [entry.details] A human-readable description of what happened (e.g., "Progress -> Completed").
+ * @param {string} [entry.result] The outcome of the action (e.g., "success", "skipped-duplicate", "error").
+ * @param {string} [entry.errorMessage] The error message if the result was "error".
  * @param {object} config The global configuration object (`CONFIG`).
  * @returns {void} This function does not return a value.
  */
@@ -215,12 +220,13 @@ function logAudit(sourceSS, entry, config) {
 }
 
 /**
- * Sorts all monthly log sheets within the designated log spreadsheet.
- * This function is designed to be run by an `onOpen` trigger in the log spreadsheet itself. It iterates through all sheets,
- * finds any that match the "YYYY-MM" log sheet format, and sorts them by timestamp (column 1) in descending order.
- * This action ensures that the latest logs are always at the top and easy to review.
+ * Sorts all monthly log sheets within the designated log spreadsheet by timestamp.
+ * This function is designed to be run by an `onOpen` trigger attached to the log spreadsheet itself.
+ * It iterates through all sheets, identifies any that match the "YYYY-MM" log sheet name format, and sorts
+ * them by the timestamp column (column 1) in descending order. This convenient action ensures that the
+ * most recent logs are always at the top and easy to review whenever the log file is opened.
  *
- * @returns {void} This function does not return a value.
+ * @returns {void} This function does not return a value; it modifies the log spreadsheet directly.
  */
 function sortLogSheetsOnOpen() {
   try {

@@ -11,16 +11,16 @@
  */
 
 /**
- * The main orchestrator function to generate or update the Dashboard sheet.
- * It follows a comprehensive sequence:
- * 1. Reads data from the 'Forecasting' sheet.
- * 2. Processes the data to calculate monthly summaries and identify overdue items.
- * 3. Renders the main data table, including grand totals and hover notes for overdue items.
- * 4. Creates or updates summary charts if enabled in the configuration.
- * 5. Hides temporary data columns to maintain a clean UI.
- * It includes robust error handling and logging throughout the process.
+ * The main orchestrator function to generate or update the Dashboard sheet. This function is typically run from the custom menu.
+ * It follows a comprehensive, idempotent sequence:
+ * 1. Reads all necessary data from the 'Forecasting' sheet.
+ * 2. Processes the raw data to calculate monthly summaries, grand totals, and identify overdue items.
+ * 3. Renders the main data table on the 'Dashboard' sheet, including setting all headers, values, and formatting.
+ * 4. Creates or updates summary charts for past and upcoming months, if enabled in the configuration.
+ * 5. Hides temporary data columns used for chart staging to maintain a clean user interface.
+ * The entire process is wrapped in robust error handling and logging.
  *
- * @returns {void} This function does not return a value.
+ * @returns {void} This function does not return a value; it modifies the spreadsheet directly.
  */
 function updateDashboard() {
   const ui = SpreadsheetApp.getUi();
@@ -187,12 +187,13 @@ function processDashboardData(forecastingValues, config) {
 
 /**
  * Renders the main data table on the Dashboard sheet.
- * This function clears and resizes the sheet, sets headers and notes, writes the monthly summary data,
- * adds hover notes for overdue items, displays grand totals, and applies all necessary formatting.
+ * This function orchestrates the entire visual layout of the dashboard. It clears and resizes the sheet,
+ * sets headers and explanatory notes, writes the monthly summary data, adds rich hover notes for overdue items,
+ * displays the grand totals, and applies all necessary formatting (banding, borders, number formats).
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} dashboardSheet The sheet object for the 'Dashboard'.
- * @param {object} processedData An object containing processed data, including the count of items with missing deadlines.
- * @param {Date[]} months An array of Date objects representing the months in the report.
+ * @param {object} processedData An object containing processed data, including `allOverdueItems` and `missingDeadlinesCount`.
+ * @param {Date[]} months An array of Date objects representing the months in the report's timeline.
  * @param {any[][]} dashboardData A 2D array of the monthly summary data to be rendered.
  * @param {number[]} grandTotals An array containing the grand totals for the summary columns.
  * @param {object} config The global configuration object (`CONFIG`).
@@ -590,12 +591,15 @@ function generateMonthList(startDate, endDate) {
 }
 
 /**
- * A verification function to audit the Dashboard's overdue calculations against the source data.
- * This can be run manually from the Apps Script editor to ensure data integrity. It checks:
- * 1. If the grand total overdue count on the dashboard matches a direct recalculation from the 'Forecasting' sheet.
- * 2. If the monthly overdue counts match the number of items listed in their corresponding hover notes.
+ * A diagnostic function to audit the Dashboard's overdue calculations against the source data.
+ * This can be run manually from the Apps Script editor to help debug or verify data integrity. It performs two key checks:
+ * 1.  **Grand Total Verification:** It recalculates the total number of overdue items directly from the 'Forecasting' sheet
+ *     and compares this count to the "GT Overdue" value displayed on the Dashboard.
+ * 2.  **Monthly Spot-Check:** It finds the first month with overdue items on the dashboard and compares the numeric count
+ *     in the cell to the number of project lines in that cell's hover-note.
+ * All findings are logged to the Apps Script logger for review.
  *
- * @returns {void} This function does not return a value; it logs its findings.
+ * @returns {void} This function does not return a value; it logs its findings to the Apps Script logger.
  */
 function runDashboardVerification() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();

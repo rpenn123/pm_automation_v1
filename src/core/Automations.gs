@@ -107,6 +107,7 @@ function onEdit(e) {
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
  * @param {string} correlationId A unique ID for tracing the entire operation.
+ * @returns {void} This function does not return a value.
  */
 function handleSyncAndPotentialFramingTransfer(e, sourceRowData, config, correlationId) {
   const FC = config.FORECASTING_COLS;
@@ -133,6 +134,7 @@ function handleSyncAndPotentialFramingTransfer(e, sourceRowData, config, correla
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Upcoming' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
  * @param {string} correlationId A unique ID for tracing the entire operation.
+ * @returns {void} This function does not return a value.
  */
 function triggerSyncToForecasting(e, sourceRowData, config, correlationId) {
   const UP = config.UPCOMING_COLS;
@@ -146,14 +148,17 @@ function triggerSyncToForecasting(e, sourceRowData, config, correlationId) {
 
 /**
  * Synchronizes the 'Progress' value from the 'Forecasting' sheet to the 'Upcoming' sheet.
+ * This function acquires a lock to prevent race conditions, finds the corresponding project row
+ * in the 'Upcoming' sheet using an SFID-first strategy, and updates the 'Progress' cell if the value has changed.
  *
  * @param {string} sfid The Salesforce ID of the project to sync.
  * @param {string} projectName The name of the project, used as a fallback if SFID is not available.
  * @param {any} newValue The new value of the 'Progress' cell to be set in the 'Upcoming' sheet.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The active spreadsheet object.
- * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original `onEdit` event context, used for logging purposes.
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original `onEdit` event context, preserved for potential future logging needs.
  * @param {object} config The global configuration object (`CONFIG`).
  * @param {string} correlationId A unique ID for tracing the entire operation.
+ * @returns {void} This function does not return a value.
  */
 function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config, correlationId) {
   const lock = LockService.getScriptLock();
@@ -199,14 +204,17 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config, c
 
 /**
  * Synchronizes the 'Progress' value from the 'Upcoming' sheet back to the 'Forecasting' sheet.
+ * This function acquires a lock, finds the corresponding project row in the 'Forecasting' sheet,
+ * and updates the 'Progress' cell if the value has changed.
  *
  * @param {string} sfid The Salesforce ID of the project to sync.
  * @param {string} projectName The name of the project, used as a fallback if SFID is not available.
  * @param {any} newValue The new value of the 'Progress' cell to be set in the 'Forecasting' sheet.
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss The active spreadsheet object.
- * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original `onEdit` event context, used for logging purposes.
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} eCtx The original `onEdit` event context, preserved for potential future logging needs.
  * @param {object} config The global configuration object (`CONFIG`).
  * @param {string} correlationId A unique ID for tracing the entire operation.
+ * @returns {void} This function does not return a value.
  */
 function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config, correlationId) {
   const lock = LockService.getScriptLock();
@@ -256,11 +264,14 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config
 
 /**
  * Defines and triggers the transfer of a project row from 'Forecasting' to 'Upcoming'.
+ * This function acts as a configuration wrapper for the generic `executeTransfer` engine. It specifies
+ * the destination sheet, column mappings, duplicate check rules, and post-transfer actions for this specific workflow.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
  * @param {string} correlationId A unique ID for tracing the entire operation.
+ * @returns {void} This function does not return a value.
  */
 function triggerUpcomingTransfer(e, sourceRowData, config, correlationId) {
   const FC = config.FORECASTING_COLS;
@@ -289,11 +300,14 @@ function triggerUpcomingTransfer(e, sourceRowData, config, correlationId) {
 
 /**
  * Defines and triggers the transfer of a project row from 'Forecasting' to 'Inventory_Elevators'.
+ * This function acts as a configuration wrapper for the generic `executeTransfer` engine. It specifies
+ * the destination sheet and column mappings for moving a project to inventory upon delivery confirmation.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
  * @param {string} correlationId A unique ID for tracing the entire operation.
+ * @returns {void} This function does not return a value.
  */
 function triggerInventoryTransfer(e, sourceRowData, config, correlationId) {
   const FC = config.FORECASTING_COLS;
@@ -317,11 +331,14 @@ function triggerInventoryTransfer(e, sourceRowData, config, correlationId) {
 
 /**
  * Defines and triggers the transfer of a project row from 'Forecasting' to 'Framing'.
+ * This function acts as a configuration wrapper for the generic `executeTransfer` engine. It specifies
+ * the destination sheet, column mappings, and a compound key for duplicate checking for the framing workflow.
  *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
  * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
  * @param {object} config The global configuration object (`CONFIG`).
  * @param {string} correlationId A unique ID for tracing the entire operation.
+ * @returns {void} This function does not return a value.
  */
 function triggerFramingTransfer(e, sourceRowData, config, correlationId) {
   const FC = config.FORECASTING_COLS;
