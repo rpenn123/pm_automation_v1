@@ -264,6 +264,9 @@ function findRowByValue(sheet, value, column) {
 
 /**
  * Implements an "SFID-first" lookup strategy to find a row in a sheet.
+ * It first attempts to find a row by the `sfid`. If the `sfid` is not provided or no match is found,
+ * it falls back to searching by the `projectName`. This provides a robust way to locate records
+ * that may or may not have a primary unique identifier.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet object to search in.
  * @param {string} sfid The Salesforce ID to search for. Can be null or empty.
@@ -277,12 +280,14 @@ function findRowByBestIdentifier(sheet, sfid, sfidCol, projectName, projectNameC
   if (!sheet || !sfidCol || !projectNameCol) {
     throw new ValidationError("findRowByBestIdentifier requires a valid sheet and column indices.");
   }
+  // Prioritize SFID lookup as it's the definitive unique identifier.
   if (sfid) {
     const row = findRowByValue(sheet, sfid, sfidCol);
     if (row !== -1) {
       return row;
     }
   }
+  // Fallback to project name if SFID fails or is not provided.
   if (projectName) {
     return findRowByProjectNameRobust(sheet, projectName, projectNameCol);
   }
