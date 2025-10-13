@@ -97,8 +97,9 @@ function notifyError(subjectDetails, error, ss, config) {
  * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet} The log spreadsheet object.
  * @throws {DependencyError} If the log spreadsheet cannot be opened or created.
  */
-function getOrCreateLogSpreadsheet(config, correlationId) {
-  const props = PropertiesService.getScriptProperties();
+function getOrCreateLogSpreadsheet(sourceSS, config, correlationId) {
+  // Use document-level properties to ensure all users of this sheet share the same log.
+  const props = PropertiesService.getDocumentProperties();
   const storedId = props.getProperty(config.LOGGING.SPREADSHEET_ID_PROP);
 
   // 1. Try opening the stored ID.
@@ -115,11 +116,25 @@ function getOrCreateLogSpreadsheet(config, correlationId) {
   // 2. Try creating a new external log spreadsheet.
   try {
     const newSS = SpreadsheetApp.create(config.LOGGING.SPREADSHEET_NAME);
-    props.setProperty(config.LOGGING.SPREADSHEET_ID_PROP, newSS.getId());
+    const newId = newSS.getId();
+    props.setProperty(config.LOGGING.SPREADSHEET_ID_PROP, newId);
+
+    // **CRITICAL FIX**: Share the new log sheet with all editors of the source spreadsheet.
+    // This resolves the multi-user permission issue where one user couldn't access another's created log sheet.
+    try {
+      const editors = sourceSS.getEditors();
+      if (editors && editors.length > 0) {
+        newSS.addEditors(editors);
+        Logger.log(`Shared new log sheet with ${editors.length} editor(s).`);
+      }
+    } catch (shareError) {
+      // If sharing fails, log a warning but do not stop the process. The owner can still access it.
+      Logger.log(`Warning: Failed to share the new log spreadsheet. Manual sharing may be required. Error: ${shareError.message}`);
+    }
+
     return newSS;
   } catch (e2) {
     // If creation fails, this is a critical, unrecoverable error for logging.
-    // **Bug Fix**: Add the specific underlying error message for better diagnostics.
     const errorMessage = `Failed to create a new log spreadsheet. Underlying error: ${e2.message}`;
     Logger.log(errorMessage); // Log the detailed error immediately for debugging.
     throw new DependencyError(errorMessage, e2);
@@ -179,7 +194,7 @@ function logAudit(sourceSS, entry, config) {
   }
 
   try {
-    const logSS = getOrCreateLogSpreadsheet(config, entry.correlationId);
+    const logSS = getOrCreateLogSpreadsheet(sourceSS, config, entry.correlationId);
     const sheet = ensureMonthlyLogSheet(logSS);
     const user = Session.getActiveUser() ? Session.getActiveUser().getEmail() : "unknown";
 
@@ -224,7 +239,7 @@ function logAudit(sourceSS, entry, config) {
  */
 function sortLogSheetsOnOpen() {
   try {
-    const logSS = getOrCreateLogSpreadsheet(CONFIG);
+    const logSS = SpreadsheetApp.getActiveSpreadsheet();
     if (!logSS) {
       Logger.log("Auto-Sort: Could not retrieve the log spreadsheet. Aborting sort.");
       return;
