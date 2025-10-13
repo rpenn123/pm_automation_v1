@@ -30,6 +30,8 @@ function onOpen(e) {
       .addItem('Set Error Notification Email', 'setErrorNotificationEmail_wrapper')
       .addSeparator()
       .addItem('Initialize Last Edit Formulas (Optional)', 'initializeLastEditFormulas_wrapper')
+      .addSeparator()
+      .addItem('Remove Old Triggers', 'cleanupOldTriggers')
     )
     .addToUi();
 
@@ -148,5 +150,33 @@ function setErrorNotificationEmail_wrapper() {
     } else {
       ui.alert("❌ Invalid Email", "The email address you entered is not valid. Please try again.", ui.ButtonSet.OK);
     }
+  }
+}
+
+/**
+ * A temporary helper function to remove the old, unused trigger
+ * that is causing the "Script function not found" error.
+ */
+function cleanupOldTriggers() {
+  const allTriggers = ScriptApp.getProjectTriggers();
+  let triggerDeleted = false;
+
+  for (const trigger of allTriggers) {
+    if (trigger.getHandlerFunction() === "sortLogSheetsOnOpen") {
+      try {
+        ScriptApp.deleteTrigger(trigger);
+        Logger.log("Successfully deleted the old 'sortLogSheetsOnOpen' trigger.");
+        triggerDeleted = true;
+      } catch (e) {
+        Logger.log(`Failed to delete trigger: ${e.message}`);
+      }
+    }
+  }
+
+  const ui = SpreadsheetApp.getUi();
+  if (triggerDeleted) {
+    ui.alert("Success!", "The old, unused 'sortLogSheetsOnOpen' trigger has been removed. The error message you saw should now be gone.", ui.ButtonSet.OK);
+  } else {
+    ui.alert("Info", "No trigger for 'sortLogSheetsOnOpen' was found. It may have already been removed.", ui.ButtonSet.OK);
   }
 }
