@@ -13,6 +13,11 @@ global.PropertiesService = {
     getScriptProperties: () => ({
         getProperty: () => null,
         setProperty: () => {},
+    }),
+    getDocumentProperties: () => ({
+        getProperty: () => null,
+        setProperty: () => {},
+        deleteProperty: () => {}
     })
 };
 
