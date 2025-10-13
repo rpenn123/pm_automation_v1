@@ -38,7 +38,9 @@ const mockSpreadsheet = {
     getSheetByName: (name) => mockSheet,
     getName: () => 'Test Spreadsheet',
     getId: () => 'test-ss-id',
-    getUrl: () => 'http://example.com/ss'
+    getUrl: () => 'http://example.com/ss',
+    getEditors: () => [], // Mocked to prevent errors in the test environment
+    addEditors: () => {}   // Mocked to prevent errors in the test environment
 };
 
 const mockSheet = {

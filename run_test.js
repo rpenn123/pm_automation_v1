@@ -13,6 +13,11 @@ global.PropertiesService = {
     getScriptProperties: () => ({
         getProperty: () => null,
         setProperty: () => {},
+    }),
+    getDocumentProperties: () => ({
+        getProperty: () => null,
+        setProperty: () => {},
+        deleteProperty: () => {}
     })
 };
 
@@ -57,7 +62,9 @@ global.SpreadsheetApp = {
                 }),
                 setFrozenRows: (num) => {}
             }),
-            appendRow: (row) => {}
+            appendRow: (row) => {},
+            getEditors: () => [],
+            addEditors: () => {}
         };
     }
 };
