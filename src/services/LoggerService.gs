@@ -140,6 +140,10 @@ function logAudit(sourceSS, entry, config) {
   }
 
   try {
+    Logger.log(`DEBUG: logAudit started. Correlation ID: ${entry.correlationId}`);
+    Logger.log(`DEBUG: sourceSS object is present: ${!!sourceSS}`);
+    Logger.log(`DEBUG: entry object: ${JSON.stringify(entry, null, 2)}`);
+
     const sheet = ensureMonthlyLogSheet(sourceSS);
     const user = Session.getActiveUser() ? Session.getActiveUser().getEmail() : "unknown";
 
@@ -158,13 +162,13 @@ function logAudit(sourceSS, entry, config) {
       entry.errorMessage || ""
     ];
 
+    Logger.log(`DEBUG: newRow content: ${JSON.stringify(newRow, null, 2)}`);
     sheet.appendRow(newRow);
-
-    // Sorting is now handled by a separate trigger to reduce latency in the main execution path.
-    // See `sortLogSheetsOnOpen`.
+    Logger.log("DEBUG: appendRow successfully completed.");
 
   } catch (e) {
     // If the logging system itself fails, use the centralized handler.
+    Logger.log(`DEBUG: Caught error in logAudit. Raw Error: ${e.message}\nStack: ${e.stack}`);
     handleError(new DependencyError("Audit logging system failed critically.", e), {
       correlationId: entry.correlationId,
       functionName: "logAudit",
