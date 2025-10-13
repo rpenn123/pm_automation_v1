@@ -88,60 +88,6 @@ function notifyError(subjectDetails, error, ss, config) {
 }
 
 /**
- * Retrieves or creates the designated log spreadsheet.
- * This function is resilient, attempting to open by ID, then create, but will throw
- * a `DependencyError` if it cannot secure a log spreadsheet, removing the fallback to the active sheet.
- *
- * @param {object} config The global configuration object (`CONFIG`).
- * @param {string} correlationId The correlation ID for tracing.
- * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet} The log spreadsheet object.
- * @throws {DependencyError} If the log spreadsheet cannot be opened or created.
- */
-function getOrCreateLogSpreadsheet(sourceSS, config, correlationId) {
-  // Use document-level properties to ensure all users of this sheet share the same log.
-  const props = PropertiesService.getDocumentProperties();
-  const storedId = props.getProperty(config.LOGGING.SPREADSHEET_ID_PROP);
-
-  // 1. Try opening the stored ID.
-  if (storedId) {
-    try {
-      return SpreadsheetApp.openById(storedId);
-    } catch (e) {
-      // The stored ID is invalid. Log this as a warning, clear the property, and proceed to create a new one.
-      Logger.log(`Stored log spreadsheet ID '${storedId}' is invalid or inaccessible. A new log sheet will be created. Error: ${e.message}`);
-      props.deleteProperty(config.LOGGING.SPREADSHEET_ID_PROP);
-    }
-  }
-
-  // 2. Try creating a new external log spreadsheet.
-  try {
-    const newSS = SpreadsheetApp.create(config.LOGGING.SPREADSHEET_NAME);
-    const newId = newSS.getId();
-    props.setProperty(config.LOGGING.SPREADSHEET_ID_PROP, newId);
-
-    // **CRITICAL FIX**: Share the new log sheet with all editors of the source spreadsheet.
-    // This resolves the multi-user permission issue where one user couldn't access another's created log sheet.
-    try {
-      const editors = sourceSS.getEditors();
-      if (editors && editors.length > 0) {
-        newSS.addEditors(editors);
-        Logger.log(`Shared new log sheet with ${editors.length} editor(s).`);
-      }
-    } catch (shareError) {
-      // If sharing fails, log a warning but do not stop the process. The owner can still access it.
-      Logger.log(`Warning: Failed to share the new log spreadsheet. Manual sharing may be required. Error: ${shareError.message}`);
-    }
-
-    return newSS;
-  } catch (e2) {
-    // If creation fails, this is a critical, unrecoverable error for logging.
-    const errorMessage = `Failed to create a new log spreadsheet. Underlying error: ${e2.message}`;
-    Logger.log(errorMessage); // Log the detailed error immediately for debugging.
-    throw new DependencyError(errorMessage, e2);
-  }
-}
-
-/**
  * Ensures that a sheet for the specified month exists in the log spreadsheet.
  * If the sheet doesn't exist, it creates and formats it with a frozen header row,
  * now including a `CorrelationId` column for traceability.
@@ -150,12 +96,12 @@ function getOrCreateLogSpreadsheet(sourceSS, config, correlationId) {
  * @param {string} [monthKey] The month key to use (e.g., "2024-07"). Defaults to the current month if not provided.
  * @returns {GoogleAppsScript.Spreadsheet.Sheet} The sheet object for the specified month.
  */
-function ensureMonthlyLogSheet(logSS, monthKey) {
+function ensureMonthlyLogSheet(sourceSS, monthKey) {
   // Use the padded month key for standardized log sheet names
-  const key = monthKey || getMonthKeyPadded();
-  let sh = logSS.getSheetByName(key);
+  const key = `Logs ${monthKey || getMonthKeyPadded()}`;
+  let sh = sourceSS.getSheetByName(key);
   if (!sh) {
-    sh = logSS.insertSheet(key);
+    sh = sourceSS.insertSheet(key);
     // Set headers and freeze the first row, now with CorrelationId.
     sh.getRange(1, 1, 1, 12).setValues([[
       "Timestamp", "CorrelationId", "User", "Action",
@@ -194,8 +140,7 @@ function logAudit(sourceSS, entry, config) {
   }
 
   try {
-    const logSS = getOrCreateLogSpreadsheet(sourceSS, config, entry.correlationId);
-    const sheet = ensureMonthlyLogSheet(logSS);
+    const sheet = ensureMonthlyLogSheet(sourceSS);
     const user = Session.getActiveUser() ? Session.getActiveUser().getEmail() : "unknown";
 
     const newRow = [
@@ -226,47 +171,5 @@ function logAudit(sourceSS, entry, config) {
       spreadsheet: sourceSS,
       extra: { originalEntry: entry }
     }, config);
-  }
-}
-
-/**
- * Sorts all monthly log sheets within the designated log spreadsheet.
- * This function is designed to be run by an `onOpen` trigger in the log spreadsheet itself. It iterates through all sheets,
- * finds any that match the "YYYY-MM" log sheet format, and sorts them by timestamp (column 1) in descending order.
- * This action ensures that the latest logs are always at the top and easy to review.
- *
- * @returns {void} This function does not return a value.
- */
-function sortLogSheetsOnOpen() {
-  try {
-    const logSS = SpreadsheetApp.getActiveSpreadsheet();
-    if (!logSS) {
-      Logger.log("Auto-Sort: Could not retrieve the log spreadsheet. Aborting sort.");
-      return;
-    }
-
-    const sheets = logSS.getSheets();
-    const monthKeyRegex = /^\d{4}-\d{2}$/; // Regex to identify "YYYY-MM" sheet names
-
-    sheets.forEach(sheet => {
-      const sheetName = sheet.getName();
-      // Check if the sheet name matches the monthly log format
-      if (monthKeyRegex.test(sheetName)) {
-        const lastRow = sheet.getLastRow();
-
-        // Only sort if there's more than just a header row
-        if (lastRow > 1) {
-          // Define the range to be sorted, excluding the header row
-          const range = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn());
-          // Sort by the first column (Timestamp) in descending order (newest first)
-          range.sort({ column: 1, ascending: false });
-          Logger.log(`Auto-Sort: Successfully sorted sheet "${sheetName}".`);
-        }
-      }
-    });
-  } catch (e) {
-    // We avoid calling notifyError here to prevent a potential infinite loop if the error
-    // is related to accessing the spreadsheet, which could trigger more logging.
-    Logger.log(`CRITICAL: Auto-Sort for log sheets failed. Error: ${e.message}`);
   }
 }

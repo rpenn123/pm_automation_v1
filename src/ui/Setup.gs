@@ -33,12 +33,6 @@ function onOpen(e) {
     )
     .addToUi();
 
-  // Run background tasks. Errors here are logged but should not stop the UI from rendering.
-  try {
-    sortLogSheetsOnOpen();
-  } catch (error) {
-    Logger.log(`Failed to sort log sheets on open: ${error}`);
-  }
 }
 
 /**
@@ -89,8 +83,7 @@ function setup() {
     Logger.log("Last Edit columns ensured.");
 
     // 3. Initialize external logging
-    const logSS = getOrCreateLogSpreadsheet(config);
-    ensureMonthlyLogSheet(logSS);
+    ensureMonthlyLogSheet(ss);
     Logger.log("Logging initialized.");
 
     ui.alert("✅ Setup Complete", "onEdit trigger installed, Last Edit columns created, and logging initialized.", ui.ButtonSet.OK);

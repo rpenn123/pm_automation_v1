@@ -35,7 +35,20 @@ let logAuditSpy;
 
 // Mock implementations for Google Apps Script services
 const mockSpreadsheet = {
-    getSheetByName: (name) => mockSheet,
+    getSheetByName: (name) => {
+      if (name.startsWith("Logs ")) {
+        return null; // Simulate log sheet not existing to force creation path
+      }
+      return mockSheet;
+    },
+    insertSheet: (name) => {
+      // Return a mock sheet that can handle the appendRow call
+      return {
+        appendRow: () => {},
+        getRange: () => ({ setValues: () => ({ setFontWeight: () => {} }) }),
+        setFrozenRows: () => {}
+      };
+    },
     getName: () => 'Test Spreadsheet',
     getId: () => 'test-ss-id',
     getUrl: () => 'http://example.com/ss',
@@ -75,27 +88,7 @@ const mockRange = {
 
 // Global mocks
 global.SpreadsheetApp = {
-    getActiveSpreadsheet: () => mockSpreadsheet,
-    // **Bug Fix**: Add the `create` mock to prevent test failures.
-    // This was overriding the mock from run_test.js.
-    create: (name) => {
-        return {
-            getId: () => 'mock-created-ss-id',
-            getName: () => name,
-            getSheets: () => [],
-            getSheetByName: () => null,
-            insertSheet: (sheetName) => ({
-                getName: () => sheetName,
-                getRange: () => ({
-                    setValues: () => ({
-                        setFontWeight: () => {}
-                    })
-                }),
-                setFrozenRows: () => {},
-                appendRow: () => {} // **Bug Fix**: Correctly placed on the sheet mock
-            })
-        };
-    }
+    getActiveSpreadsheet: () => mockSpreadsheet
 };
 
 global.Session = {

@@ -39,34 +39,6 @@ global.SpreadsheetApp = {
             getMaxColumns: () => 10,
         })
     }),
-    // This mock will throw by default, which is what the logger test needs to trigger the `catch` block.
-    // Specific tests can override this behavior if they need to successfully open a sheet.
-    openById: (id) => {
-        throw new Error(`Mock SpreadSheetApp: openById cannot find ${id}`);
-    },
-    // This mock provides the functionality needed for the self-healing logger to work in tests.
-    create: (name) => {
-        console.log(`[SpreadsheetApp MOCK] create('${name}')`);
-        // Return a mock spreadsheet that supports the methods used in the logger
-        return {
-            getId: () => 'mock-created-ss-id',
-            getName: () => name,
-            getSheets: () => [],
-            getSheetByName: (sheetName) => null, // To force creation of monthly sheet
-            insertSheet: (sheetName) => ({
-                getName: () => sheetName,
-                getRange: (row, col, numRows, numCols) => ({
-                    setValues: () => ({
-                        setFontWeight: () => {}
-                    })
-                }),
-                setFrozenRows: (num) => {}
-            }),
-            appendRow: (row) => {},
-            getEditors: () => [],
-            addEditors: () => {}
-        };
-    }
 };
 
 global.notifyError = (subject, error, ss) => {
