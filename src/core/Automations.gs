@@ -168,10 +168,18 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config, c
   const actionName = "SyncFtoU";
 
   try {
-    withRetry(() => {
-      lockAcquired = lock.tryLock(1000);
-      if (!lockAcquired) throw new Error("Lock not acquired for sync.");
-    }, { functionName: `${actionName}:acquireLock`, correlationId: correlationId });
+    lockAcquired = lock.tryLock(1000); // Try to acquire lock for 1 second
+
+    if (!lockAcquired) {
+      // If lock is busy, log it and exit gracefully.
+      logAudit(ss, {
+        correlationId: correlationId,
+        action: actionName,
+        details: "Sync skipped: lock was busy.",
+        result: "noop"
+      }, config);
+      return;
+    }
 
     const upcomingSheet = ss.getSheetByName(UPCOMING);
     if (!upcomingSheet) throw new ConfigurationError(`Destination sheet "${UPCOMING}" not found`);
@@ -221,10 +229,18 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config
   const actionName = "SyncUtoF";
 
   try {
-    withRetry(() => {
-      lockAcquired = lock.tryLock(1000);
-      if (!lockAcquired) throw new Error("Lock not acquired for sync.");
-    }, { functionName: `${actionName}:acquireLock`, correlationId: correlationId });
+    lockAcquired = lock.tryLock(1000); // Try to acquire lock for 1 second
+
+    if (!lockAcquired) {
+      // If lock is busy, log it and exit gracefully.
+      logAudit(ss, {
+        correlationId: correlationId,
+        action: actionName,
+        details: "Sync skipped: lock was busy.",
+        result: "noop"
+      }, config);
+      return;
+    }
 
     const forecastingSheet = ss.getSheetByName(FORECASTING);
     if (!forecastingSheet) throw new ConfigurationError(`Destination sheet "${FORECASTING}" not found`);
