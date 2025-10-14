@@ -102,34 +102,11 @@ global.LockService = {
     }),
 };
 
-// Mock CONFIG object
-const CONFIG = {
-    APP_NAME: "Test App",
-    LAST_EDIT: {
-        TRACKED_SHEETS: ['Forecasting', 'Upcoming'],
-        AT_HEADER: "AT_HEADER",
-        REL_HEADER: "REL_HEADER"
-    },
-    SHEETS: {
-        FORECASTING: 'Forecasting',
-        UPCOMING: 'Upcoming'
-    },
-    FORECASTING_COLS: {
-        PROGRESS: 2,
-    },
-    UPCOMING_COLS: {
-        PROGRESS: 2
-    },
-    STATUS_STRINGS: {
-        IN_PROGRESS: "In Progress"
-    }
-};
-
 /**
  * Test runner for audit logging.
  */
 function runAuditLoggingTests() {
-    console.log('Running tests for Audit Logging...');
+    console.log('Running test: testOnEdit_ShouldLogAuditForTrackedSheets');
     testOnEdit_ShouldLogAuditForTrackedSheets();
     console.log('All Audit Logging tests passed!');
 }
@@ -138,12 +115,9 @@ function runAuditLoggingTests() {
  * Test case: Verifies that a simple edit on a tracked sheet triggers an audit log entry.
  */
 function testOnEdit_ShouldLogAuditForTrackedSheets() {
-    console.log('Running test: testOnEdit_ShouldLogAuditForTrackedSheets');
-
-    // Set up the spy on the global logAudit function
+    const original = JSON.parse(JSON.stringify(global.CONFIG));
     logAuditSpy = createSpy(global, 'logAudit');
 
-    // Mock the onEdit event object
     const e = {
         range: mockRange,
         value: 'new value',
@@ -152,6 +126,15 @@ function testOnEdit_ShouldLogAuditForTrackedSheets() {
     };
 
     try {
+        global.CONFIG = {
+            ...original,
+            LAST_EDIT: { TRACKED_SHEETS: ['Forecasting', 'Upcoming'], AT_HEADER: "AT_HEADER", REL_HEADER: "REL_HEADER" },
+            SHEETS: { FORECASTING: 'Forecasting', UPCOMING: 'Upcoming' },
+            FORECASTING_COLS: { PROGRESS: 2 },
+            UPCOMING_COLS: { PROGRESS: 2 },
+            STATUS_STRINGS: { IN_PROGRESS: "In Progress", INSPECTIONS: "Inspections" }
+        };
+
         // Execute the onEdit function
         onEdit(e);
 
@@ -185,7 +168,8 @@ function testOnEdit_ShouldLogAuditForTrackedSheets() {
 
         console.log('Test passed: testOnEdit_ShouldLogAuditForTrackedSheets');
     } finally {
-        // Clean up the spy
+        // Clean up the spy and restore config
         logAuditSpy.restore();
+        global.CONFIG = original;
     }
 }

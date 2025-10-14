@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 
 // =================================================================
 // =================== MOCK GLOBAL OBJECTS =========================
@@ -34,6 +35,15 @@ global.SpreadsheetApp = {
             getMaxColumns: () => 10,
         })
     }),
+    flush: () => {},
+    BandingTheme: { LIGHT_GREY: 'LIGHT_GREY' },
+    BorderStyle: { SOLID_THIN: 'SOLID_THIN' }
+};
+
+global.Charts = {
+  ChartHiddenDimensionStrategy: {
+    IGNORE_ROWS: 'IGNORE_ROWS'
+  }
 };
 
 global.notifyError = (subject, error, ss) => {
@@ -136,19 +146,6 @@ let errorServiceGs = fs.readFileSync('src/services/ErrorService.gs', 'utf8');
 const automationsGs = fs.readFileSync('src/core/Automations.gs', 'utf8');
 let transferEngineGs = fs.readFileSync('src/core/TransferEngine.gs', 'utf8');
 
-// Load test files
-const testGs = fs.readFileSync('tests/bugfix-robust-find-test.gs', 'utf8');
-const existingTestGs = fs.readFileSync('tests/test_Utilities.gs', 'utf8');
-const chartTitleTestGs = fs.readFileSync('tests/chart_title.test.gs', 'utf8');
-const dashboardTestGs = fs.readFileSync('tests/test_Dashboard.gs', 'utf8');
-const auditTestGs = fs.readFileSync('tests/test_AuditLogging.gs', 'utf8');
-const hoverNotesTestGs = fs.readFileSync('tests/test_Dashboard_HoverNotes.gs', 'utf8');
-const transferEngineTestGs = fs.readFileSync('tests/test_TransferEngine.gs', 'utf8');
-const transferEngineSortTestGs = fs.readFileSync('tests/test_TransferEngine_Sort.gs', 'utf8');
-const findRowByValueTestGs = fs.readFileSync('tests/test_findRowByValue.gs', 'utf8');
-const errorHandlingTestGs = fs.readFileSync('tests/test_ErrorHandling.gs', 'utf8');
-const transferEngineReadWidthTestGs = fs.readFileSync('tests/test_TransferEngine_ReadWidth.gs', 'utf8');
-const dateAsNameBugfixTestGs = fs.readFileSync('tests/bugfix/DateAsName.test.gs', 'utf8');
 
 // Make CONFIG global for tests
 configGs = configGs.replace('const CONFIG =', 'global.CONFIG =');
@@ -172,49 +169,131 @@ transferEngineGs = transferEngineGs.replace('function executeTransfer(', 'global
 transferEngineGs = transferEngineGs.replace('function isDuplicateInDestination(', 'global.isDuplicateInDestination = function isDuplicateInDestination(');
 eval(transferEngineGs); // TransferEngine is needed by Automations
 
-eval(testGs);
-eval(existingTestGs);
-eval(chartTitleTestGs);
-eval(dashboardTestGs);
-eval(auditTestGs);
-eval(hoverNotesTestGs);
-eval(transferEngineTestGs);
-eval(transferEngineSortTestGs);
-eval(findRowByValueTestGs);
-eval(errorHandlingTestGs);
-eval(transferEngineReadWidthTestGs);
-eval(dateAsNameBugfixTestGs);
+// =================================================================
+// =================== NEW TEST HARNESS ============================
+// =================================================================
+
+// Snap a pristine copy of CONFIG to restore before each suite.
+const BASE_CONFIG_JSON = JSON.stringify(global.CONFIG || {});
+
+/** Reset global.CONFIG to its original value */
+function resetConfig() {
+  global.CONFIG = JSON.parse(BASE_CONFIG_JSON);
+  // After parsing, the date objects are strings, so we need to convert them back.
+  if (global.CONFIG.DASHBOARD_DATES) {
+    global.CONFIG.DASHBOARD_DATES.START = new Date(global.CONFIG.DASHBOARD_DATES.START);
+    global.CONFIG.DASHBOARD_DATES.END = new Date(global.CONFIG.DASHBOARD_DATES.END);
+  }
+}
+
+/** Deep freeze to detect any accidental writes during a suite */
+function deepFreeze(o) {
+  if (!o || typeof o !== 'object' || Object.isFrozen(o)) return o;
+  Object.freeze(o);
+  for (const k of Object.getOwnPropertyNames(o)) {
+    const v = o[k];
+    if (v && typeof v === 'object' && !Object.isFrozen(v)) deepFreeze(v);
+  }
+  return o;
+}
+
+/** Optional: diff helper to print changes to CONFIG after a suite */
+function diffConfig(a, b, prefix = '') {
+  const lines = [];
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  for (const k of keys) {
+    const pa = a ? a[k] : undefined;
+    const pb = b ? b[k] : undefined;
+    const pfx = prefix ? `${prefix}.${k}` : k;
+    const ta = Object.prototype.toString.call(pa);
+    const tb = Object.prototype.toString.call(pb);
+    if (ta === '[object Object]' && tb === '[object Object]') {
+      lines.push(...diffConfig(pa, pb, pfx));
+    } else if (JSON.stringify(pa) !== JSON.stringify(pb)) {
+      lines.push(`CONFIG changed at ${pfx}: ${JSON.stringify(pa)} -> ${JSON.stringify(pb)}`);
+    }
+  }
+  return lines;
+}
+
+/**
+ * Evaluate a test file inside an IIFE so top-level const/let (e.g. `const CONFIG = ...`)
+ * do not leak into the shared VM. Also export run* test functions to global.
+ */
+function evalTestFile(absPath) {
+  let code = fs.readFileSync(absPath, 'utf8');
+
+  // Export any function declared as `function runXxx(...)` to global
+  code = code.replace(
+    /(^|\n)\s*function\s+(run[A-Za-z0-9_]+)\s*\(/g,
+    (m, lead, name) => `${lead}global.${name} = function ${name}(`
+  );
+
+    // Export any function declared as `function testXxx(...)` to global
+  code = code.replace(
+    /(^|\n)\s*function\s+(test[A-Za-z0-9_]+)\s*\(/g,
+    (m, lead, name) => `${lead}global.${name} = function ${name}(`
+  );
+
+  // Wrap in an IIFE to contain top-level bindings
+  const wrapped = `(function(){\n${code}\n})();`;
+  eval(wrapped);
+}
+
+/** Run a suite with an automatic CONFIG reset and freeze */
+function runSuite(name, fn) {
+  resetConfig();
+  //deepFreeze(global.CONFIG); // Temporarily disabled to allow for mocking
+  const before = JSON.parse(JSON.stringify(global.CONFIG));
+  console.log(`\n--- Running ${name} tests ---`);
+  try {
+    fn();
+  } finally {
+    const after = JSON.parse(JSON.stringify(global.CONFIG));
+    const changes = diffConfig(before, after);
+    if (changes.length) {
+      console.warn(`\n[WARN] ${name} modified CONFIG:\n` + changes.map(s => '  - ' + s).join('\n'));
+    }
+  }
+}
 
 // =================================================================
 // ======================= TEST EXECUTION ==========================
 // =================================================================
 
-// Run the tests
 try {
-    console.log("\n--- Running Date-As-Name Bugfix tests ---");
-    runDateAsNameBugfixTests();
-    console.log("\n--- Running new bugfix test ---");
-    runRobustFindTest();
-    console.log("\n--- Running existing utility tests ---");
-    runUtilityTests();
-    console.log("\n--- Running chart title tests ---");
-    runChartTitleTests();
-    console.log("\n--- Running dashboard tests ---");
-    test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue();
-    console.log("\n--- Running audit logging tests ---");
-    runAuditLoggingTests();
-    console.log("\n--- Running Dashboard Hover Notes test ---");
-    test_Dashboard_HoverNotes();
-    console.log("\n--- Running Transfer Engine tests ---");
-    runTransferEngineTests();
-    console.log("\n--- Running Transfer Engine Sort tests ---");
-    runTransferEngineSortTests();
-    console.log("\n--- Running findRowByValue tests ---");
-    runFindRowByValueTests();
-    console.log("\n--- Running Error Handling tests ---");
-    runErrorHandlingTests();
-    console.log("\n--- Running Transfer Engine Read Width tests ---");
-    runTransferEngineReadWidthTests();
+    // Load all test files using the new sandboxed loader
+    const testsDir = path.resolve(__dirname, 'tests');
+    evalTestFile(path.join(testsDir, 'bugfix-robust-find-test.gs'));
+    evalTestFile(path.join(testsDir, 'test_Utilities.gs'));
+    evalTestFile(path.join(testsDir, 'chart_title.test.gs'));
+    evalTestFile(path.join(testsDir, 'test_Dashboard.gs'));
+    evalTestFile(path.join(testsDir, 'test_AuditLogging.gs'));
+    evalTestFile(path.join(testsDir, 'test_Dashboard_HoverNotes.gs'));
+    evalTestFile(path.join(testsDir, 'test_TransferEngine.gs'));
+    evalTestFile(path.join(testsDir, 'test_TransferEngine_Sort.gs'));
+    evalTestFile(path.join(testsDir, 'test_findRowByValue.gs'));
+    evalTestFile(path.join(testsDir, 'test_ErrorHandling.gs'));
+    evalTestFile(path.join(testsDir, 'test_TransferEngine_ReadWidth.gs'));
+    evalTestFile(path.join(testsDir, 'bugfix/DateAsName.test.gs'));
+    evalTestFile(path.join(testsDir, 'test_inspections_email.gs'));
+
+
+    // Run suites with isolation
+    runSuite('Date-As-Name Bugfix', () => global.runDateAsNameBugfixTests && runDateAsNameBugfixTests());
+    runSuite('Robust Find', () => global.runRobustFindTest && runRobustFindTest());
+    runSuite('Utility', () => global.runUtilityTests && runUtilityTests());
+    runSuite('Chart Title', () => global.runChartTitleTests && runChartTitleTests());
+    runSuite('Dashboard', () => global.test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue && test_nonCompleteProjectWithPastDeadline_isCountedAsOverdue());
+    runSuite('Audit Logging', () => global.runAuditLoggingTests && runAuditLoggingTests());
+    runSuite('Dashboard Hover Notes', () => global.test_Dashboard_HoverNotes && test_Dashboard_HoverNotes());
+    runSuite('Transfer Engine', () => global.runTransferEngineTests && runTransferEngineTests());
+    runSuite('Transfer Engine Sort', () => global.runTransferEngineSortTests && runTransferEngineSortTests());
+    runSuite('Find Row By Value', () => global.runFindRowByValueTests && runFindRowByValueTests());
+    runSuite('Error Handling', () => global.runErrorHandlingTests && runErrorHandlingTests());
+    runSuite('Transfer Engine Read Width', () => global.runTransferEngineReadWidthTests && runTransferEngineReadWidthTests());
+    runSuite('Inspection Email', () => global.test_sendInspectionEmail_sendsCorrectEmail && test_sendInspectionEmail_sendsCorrectEmail());
+
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);

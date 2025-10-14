@@ -21,8 +21,13 @@ function assertEquals(actual, expected, message) {
  * Main function to run the tests, following the project's convention.
  */
 function runDateAsNameBugfixTests() {
-    console.log("  > Running test: isDuplicateInDestination should not find a duplicate for different date-like names...");
-    test_isDuplicateInDestination_handlesDateLikeNames();
+    const originalConfig = global.CONFIG;
+    try {
+        console.log("  > Running test: isDuplicateInDestination should not find a duplicate for different date-like names...");
+        test_isDuplicateInDestination_handlesDateLikeNames();
+    } finally {
+        global.CONFIG = originalConfig;
+    }
     console.log("    ... PASSED");
 
     console.log("  > Running test: findRowByProjectNameRobust should not find a match for different date-like names...");
