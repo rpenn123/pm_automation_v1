@@ -338,10 +338,9 @@ function triggerFramingTransfer(e, sourceRowData, config, correlationId) {
     duplicateCheckConfig: {
       checkEnabled: true,
       sfidSourceCol: FC.SFID, sfidDestCol: FR.SFID,
-      projectNameSourceCol: FC.PROJECT_NAME, projectNameDestCol: FR.PROJECT_NAME,
-      compoundKeySourceCols: [FC.DEADLINE], compoundKeyDestCols: [FR.DEADLINE],
-      keySeparator: "|"
-    }
+      projectNameSourceCol: FC.PROJECT_NAME, projectNameDestCol: FR.PROJECT_NAME
+    },
+    syncOnDuplicate: true
   };
   executeTransfer(e, transferConfig, sourceRowData, correlationId);
 }
