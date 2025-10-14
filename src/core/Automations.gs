@@ -119,9 +119,14 @@ function handleSyncAndPotentialFramingTransfer(e, sourceRowData, config, correla
     syncProgressToUpcoming(sfid, projectName, newValue, e.source, e, config, correlationId);
   }
 
-  // 2. Conditional Transfer to Framing.
-  if (normalizeString(newValue) === config.STATUS_STRINGS.IN_PROGRESS.toLowerCase()) {
+  // 2. Conditional actions based on the new status.
+  const normalizedValue = normalizeString(newValue);
+  const STATUS = config.STATUS_STRINGS;
+
+  if (normalizedValue === STATUS.IN_PROGRESS.toLowerCase()) {
     triggerFramingTransfer(e, sourceRowData, config, correlationId);
+  } else if (normalizedValue === STATUS.INSPECTIONS.toLowerCase()) {
+    triggerInspectionEmail(e, sourceRowData, config, correlationId);
   }
 }
 
@@ -285,6 +290,90 @@ function triggerUpcomingTransfer(e, sourceRowData, config, correlationId) {
     }
   };
   executeTransfer(e, transferConfig, sourceRowData, correlationId);
+}
+
+/**
+ * Defines and triggers an email notification when a project's progress is set to 'Inspections'.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The `onEdit` event object from the trigger.
+ * @param {any[]} sourceRowData The pre-read data from the entire edited row in the 'Forecasting' sheet.
+ * @param {object} config The global configuration object (`CONFIG`).
+ * @param {string} correlationId A unique ID for tracing the entire operation.
+ */
+function triggerInspectionEmail(e, sourceRowData, config, correlationId) {
+  const FC = config.FORECASTING_COLS;
+  const UP = config.UPCOMING_COLS;
+  const ss = e.source;
+  const actionName = "InspectionEmail";
+
+  try {
+    const projectName = sourceRowData[FC.PROJECT_NAME - 1];
+    const equipment = sourceRowData[FC.EQUIPMENT - 1];
+    const location = sourceRowData[FC.LOCATION - 1];
+    const sfid = sourceRowData[FC.SFID - 1];
+
+    // Construction status is on the 'Upcoming' sheet, so we need to look it up.
+    const upcomingSheet = ss.getSheetByName(config.SHEETS.UPCOMING);
+    let constructionStatus = "N/A"; // Default value
+
+    if (upcomingSheet) {
+      const upcomingRow = findRowByBestIdentifier(upcomingSheet, sfid, UP.SFID, projectName, UP.PROJECT_NAME);
+      if (upcomingRow !== -1) {
+        // Correctly get the value from the identified row and column
+        constructionStatus = upcomingSheet.getRange(upcomingRow, UP.CONSTRUCTION).getValue();
+      } else {
+        logAudit(ss, {
+          correlationId,
+          action: actionName,
+          details: `Could not find matching project in '${config.SHEETS.UPCOMING}' to look up Construction status.`,
+          result: "warning"
+        }, config);
+      }
+    } else {
+        logAudit(ss, {
+          correlationId,
+          action: actionName,
+          details: `Sheet '${config.SHEETS.UPCOMING}' not found for Construction status lookup.`,
+          result: "warning"
+        }, config);
+    }
+
+    const subject = `Re: Inspection Update | ${projectName}`;
+    const body = `
+Project: ${projectName}
+Status (Progress): Ready for Inspections
+Equipment: ${equipment}
+Construction: ${constructionStatus}
+Address: ${location}
+    `.trim();
+
+    MailApp.sendEmail({
+      to: "pm@mobility123.com",
+      subject: subject,
+      body: body,
+    });
+
+    logAudit(ss, {
+      correlationId: correlationId,
+      action: actionName,
+      sourceSheet: e.range.getSheet().getName(),
+      sourceRow: e.range.getRow(),
+      sfid: sfid,
+      projectName: projectName,
+      details: "Inspection email sent successfully.",
+      result: "success"
+    }, config);
+
+  } catch (error) {
+    handleError(error, {
+      correlationId: correlationId,
+      functionName: actionName,
+      spreadsheet: ss,
+      extra: {
+        sourceRow: e.range.getRow()
+      }
+    }, config);
+  }
 }
 
 /**

@@ -42,7 +42,8 @@ const CONFIG = {
     PERMIT_APPROVED: "approved",
     SCHEDULED: "Scheduled",
     COMPLETED: "Completed",
-    CANCELLED: "Cancelled"
+    CANCELLED: "Cancelled",
+    INSPECTIONS: "Inspections"
   },
 
   // --- Forecasting Columns (1-indexed) ---

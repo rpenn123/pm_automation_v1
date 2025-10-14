@@ -15,6 +15,7 @@ function runErrorHandlingTests() {
     const originalMailApp = global.MailApp;
     const originalSpreadsheetApp = global.SpreadsheetApp;
     const originalNotifyError = global.notifyError;
+    const originalConfig = global.CONFIG;
 
     // Setup mocks
     global.Logger = { log: (message) => {} }; // Suppress logs for most tests
@@ -36,6 +37,7 @@ function runErrorHandlingTests() {
         global.MailApp = originalMailApp;
         global.SpreadsheetApp = originalSpreadsheetApp;
         global.notifyError = originalNotifyError;
+        global.CONFIG = originalConfig;
     }
 }
 
