@@ -372,9 +372,28 @@ function findDuplicateRow(destinationSheet, sfid, projectName, sourceRowData, so
  * @param {string} correlationId A unique ID for tracing the operation.
  */
 function updateRowInDestination(sheet, rowIndex, newRowData, config, correlationId) {
-  const range = sheet.getRange(rowIndex, 1, 1, newRowData.length);
-  withRetry(() => range.setValues([newRowData]), {
+  const mapping = config.destinationColumnMapping || {};
+  const destCols = Object.values(mapping).map(Number).filter(Number.isFinite);
+  if (!destCols.length) return;
+  const maxDestCol = Math.max(...destCols);
+
+  // Read current row (only up to highest mapped col)
+  const range = sheet.getRange(rowIndex, 1, 1, maxDestCol);
+  const existing = withRetry(() => range.getValues(), {
+    functionName: `${config.transferName}:readRowBeforeUpdate`,
+    correlationId
+  })[0];
+
+  // Merge: only mapped destination columns are replaced
+  const merged = existing.slice();
+  for (const destCol of destCols) {
+    const i = destCol - 1;
+    const v = newRowData[i];
+    if (typeof v !== "undefined") merged[i] = v;
+  }
+
+  withRetry(() => range.setValues([merged]), {
     functionName: `${config.transferName}:updateRow`,
-    correlationId: correlationId
+    correlationId
   });
 }
