@@ -263,10 +263,10 @@ function findRowByValue(sheet, value, column) {
     return sheet.getRange(2, column, lastRow - 1, 1).getValues();
   }, { functionName: "findRowByValue:readColumn" });
 
-  const searchValue = String(value).trim();
+  const searchValue = String(value).trim().toLowerCase();
 
   for (let i = 0; i < values.length; i++) {
-    if (String(values[i][0]).trim() === searchValue) {
+    if (String(values[i][0]).trim().toLowerCase() === searchValue) {
       return i + 2;
     }
   }

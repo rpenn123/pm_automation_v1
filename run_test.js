@@ -268,6 +268,7 @@ function runSuite(name, fn) {
 try {
     // Load all test files using the new sandboxed loader
     const testsDir = path.resolve(__dirname, 'tests');
+    evalTestFile(path.join(testsDir, 'bugfix/test_findRowByValue_case_insensitivity.gs'));
     evalTestFile(path.join(testsDir, 'bugfix-robust-find-test.gs'));
     evalTestFile(path.join(testsDir, 'test_Utilities.gs'));
     evalTestFile(path.join(testsDir, 'chart_title.test.gs'));
@@ -303,6 +304,7 @@ try {
     runSuite('Upcoming Sync on Duplicate', () => global.run_test_upcoming_sync_on_duplicate && run_test_upcoming_sync_on_duplicate());
     runSuite('Upcoming Fallback Compound Key', () => global.run_test_upcoming_fallback_compound_key && run_test_upcoming_fallback_compound_key());
     runSuite('Update Row Non-Destructive', () => global.run_test_update_row_non_destructive && run_test_update_row_non_destructive());
+    runSuite('Bugfix', () => global.runBugfixTests && runBugfixTests());
 
     console.log("\nTest execution finished successfully.");
 } catch (e) {
