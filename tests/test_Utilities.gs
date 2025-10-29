@@ -4,6 +4,57 @@
 
 function runUtilityTests() {
   test_getHeaderColumnIndex_withEmptyTrailingColumns();
+  test_formatValueForKey_handlesDateLikeStrings();
+}
+
+/**
+ * Tests the `formatValueForKey` function to ensure it does not misinterpret
+ * date-like strings as actual dates. Project names or other identifiers that
+ * look like dates (e.g., "10/5/2024") should be treated as literal strings.
+ */
+function test_formatValueForKey_handlesDateLikeStrings() {
+    const testName = 'test_formatValueForKey_handlesDateLikeStrings';
+    let passed = true;
+    const failures = [];
+
+    // Test Cases: input and expected output
+    const testCases = {
+        '5/10/2024': '5/10/2024',
+        '2024-03-15': '2024-03-15',
+        ' 12345 ': '12345',
+        'Normal Project Name': 'normal project name',
+        '': '',
+        '   ': ''
+    };
+
+    // Mock Date object to ensure dates are still handled correctly
+    const realDate = new Date('2024-10-05T00:00:00.000Z');
+    const expectedDateString = '2024-10-05';
+
+    // 1. ARRANGE & 2. ACT
+    // Test date-like strings
+    for (const input in testCases) {
+        const expected = testCases[input];
+        const actual = formatValueForKey(input);
+        if (actual !== expected) {
+            passed = false;
+            failures.push(`Input: "${input}", Expected: "${expected}", Got: "${actual}"`);
+        }
+    }
+
+    // Test a real date object
+    const actualDateResult = formatValueForKey(realDate);
+    if (actualDateResult !== expectedDateString) {
+        passed = false;
+        failures.push(`Input: Date Object, Expected: "${expectedDateString}", Got: "${actualDateResult}"`);
+    }
+
+    // 3. ASSERT
+    if (!passed) {
+        throw new Error(`${testName} FAILED:\n${failures.join('\n')}`);
+    } else {
+        Logger.log(`${testName} PASSED`);
+    }
 }
 
 /**

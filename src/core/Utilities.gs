@@ -126,24 +126,24 @@ function parseAndNormalizeDate(input) {
 }
 
 /**
- * Formats a value for use in creating unique string-based keys, a core part of the `TransferEngine`'s duplicate checking mechanism.
+ * Formats a value for use in creating unique string-based keys.
  * It handles Date objects and other values differently to ensure consistent comparisons:
- * - Date objects and recognizable date strings are formatted as `"yyyy-MM-dd"`.
- * - All other values are normalized to a lowercased, trimmed string.
+ * - **Actual `Date` objects** are formatted as a consistent `"yyyy-MM-dd"` string.
+ * - All other values (including strings that may look like dates) are normalized to a lowercased, trimmed string.
  *
  * @param {any} value The value to format.
  * @returns {string} The formatted string, ready for use as a key.
  */
 function formatValueForKey(value) {
-  // First, try to parse the value as a date. This handles both actual Date objects
-  // and common date-string formats from the spreadsheet.
-  const parsedDate = parseAndNormalizeDate(value);
-  if (parsedDate) {
-    // If it's a valid date, format it consistently.
-    return Utilities.formatDate(parsedDate, "UTC", "yyyy-MM-dd");
+  // Only format actual Date objects. This prevents misinterpreting date-like strings.
+  if (value instanceof Date) {
+    const parsedDate = parseAndNormalizeDate(value);
+    if (parsedDate) {
+      return Utilities.formatDate(parsedDate, "UTC", "yyyy-MM-dd");
+    }
   }
-  // If it's not a date, fall back to the standard string normalization.
-  return (value !== null && value !== undefined) ? String(value).trim().toLowerCase() : "";
+  // All other values are treated as simple strings.
+  return normalizeString(value);
 }
 
 /**
