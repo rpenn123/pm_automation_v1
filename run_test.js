@@ -5,6 +5,10 @@ const path = require('path');
 // =================== MOCK GLOBAL OBJECTS =========================
 // =================================================================
 
+// Load the mock framework
+const mockFramework = fs.readFileSync('tests/mockFramework.js', 'utf8');
+eval(mockFramework);
+
 // Mock the global objects that the .gs files expect to exist.
 global.Logger = {
     log: (message) => console.log(`[Logger] ${message}`)
@@ -277,6 +281,9 @@ try {
     evalTestFile(path.join(testsDir, 'test_TransferEngine_ReadWidth.gs'));
     evalTestFile(path.join(testsDir, 'bugfix/DateAsName.test.gs'));
     evalTestFile(path.join(testsDir, 'test_inspections_email.gs'));
+    evalTestFile(path.join(testsDir, 'test_Upcoming_SyncOnDuplicate.gs'));
+    evalTestFile(path.join(testsDir, 'test_Upcoming_FallbackCompoundKey.gs'));
+    evalTestFile(path.join(testsDir, 'test_UpdateRow_NonDestructive.gs'));
 
 
     // Run suites with isolation
@@ -293,6 +300,9 @@ try {
     runSuite('Error Handling', () => global.runErrorHandlingTests && runErrorHandlingTests());
     runSuite('Transfer Engine Read Width', () => global.runTransferEngineReadWidthTests && runTransferEngineReadWidthTests());
     runSuite('Inspection Email', () => global.test_sendInspectionEmail_sendsCorrectEmail && test_sendInspectionEmail_sendsCorrectEmail());
+    runSuite('Upcoming Sync on Duplicate', () => global.run_test_upcoming_sync_on_duplicate && run_test_upcoming_sync_on_duplicate());
+    runSuite('Upcoming Fallback Compound Key', () => global.run_test_upcoming_fallback_compound_key && run_test_upcoming_fallback_compound_key());
+    runSuite('Update Row Non-Destructive', () => global.run_test_update_row_non_destructive && run_test_update_row_non_destructive());
 
     console.log("\nTest execution finished successfully.");
 } catch (e) {

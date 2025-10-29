@@ -282,9 +282,18 @@ function triggerUpcomingTransfer(e, sourceRowData, config, correlationId) {
     ]),
     duplicateCheckConfig: {
       checkEnabled: true,
-      sfidSourceCol: FC.SFID, sfidDestCol: UP.SFID,
-      projectNameSourceCol: FC.PROJECT_NAME, projectNameDestCol: UP.PROJECT_NAME
+      // Primary: SFID
+      sfidSourceCol: FC.SFID,
+      sfidDestCol:   UP.SFID,
+      // Fallback: Project Name + Location
+      projectNameSourceCol: FC.PROJECT_NAME,
+      projectNameDestCol:   UP.PROJECT_NAME,
+      compoundKeySourceCols: [FC.PROJECT_NAME, FC.LOCATION],
+      compoundKeyDestCols:   [UP.PROJECT_NAME, UP.LOCATION],
+      keySeparator: "|"
     },
+    // Update destination when a duplicate is found
+    syncOnDuplicate: true,
     postTransferActions: {
       sort: true, sortColumn: UP.DEADLINE, sortAscending: false
     }

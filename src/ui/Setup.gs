@@ -33,8 +33,22 @@ function onOpen(e) {
       .addSeparator()
       .addItem('Remove Old Triggers', 'cleanupOldTriggers')
     )
+    .addSubMenu(SpreadsheetApp.getUi().createMenu("Maintenance")
+      .addItem("Dedupe Upcoming (SFID → Name|Location)", "dedupeUpcomingBySfidOrNameLoc_wrapper"))
     .addToUi();
 
+}
+
+function dedupeUpcomingBySfidOrNameLoc_wrapper() {
+  const ui = SpreadsheetApp.getUi();
+  const resp = ui.alert(
+    "Dedupe Upcoming",
+    "This will remove older duplicates in 'Upcoming'. Proceed?",
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (resp !== ui.Button.OK) return;
+  dedupeUpcomingBySfidOrNameLoc();
+  ui.alert("Done", "Deduplication completed.", ui.ButtonSet.OK);
 }
 
 /**
