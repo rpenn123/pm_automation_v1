@@ -284,9 +284,11 @@ try {
     evalTestFile(path.join(testsDir, 'test_Upcoming_SyncOnDuplicate.gs'));
     evalTestFile(path.join(testsDir, 'test_Upcoming_FallbackCompoundKey.gs'));
     evalTestFile(path.join(testsDir, 'test_UpdateRow_NonDestructive.gs'));
+    evalTestFile(path.join(testsDir, 'bugfix/test_DedupeUpcoming_TieBreaking.gs'));
 
 
     // Run suites with isolation
+    runSuite('DedupeUpcoming Tie-Breaker', () => global.runDedupeUpcomingTieBreakerTest && runDedupeUpcomingTieBreakerTest());
     runSuite('Date-As-Name Bugfix', () => global.runDateAsNameBugfixTests && runDateAsNameBugfixTests());
     runSuite('Robust Find', () => global.runRobustFindTest && runRobustFindTest());
     runSuite('Utility', () => global.runUtilityTests && runUtilityTests());
