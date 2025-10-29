@@ -83,26 +83,45 @@ function parseAndNormalizeDate(input) {
     return date;
   }
 
-  // 2. If it's a string, strictly validate and parse it.
+  // 2. If it's a string, strictly validate and manually parse it.
   if (typeof input === 'string') {
     const trimmedInput = input.trim();
+    if (/^\d+$/.test(trimmedInput)) return null; // Ignore numeric strings.
 
-    // A. Ignore purely numeric strings to avoid misinterpreting IDs as dates.
-    if (/^\d+$/.test(trimmedInput)) {
-      return null;
+    let date = null;
+    let match;
+
+    // B. Manually parse common date formats to avoid ambiguity with `new Date(string)`.
+    // Case 1: MM/DD/YYYY or MM-DD-YYYY
+    match = trimmedInput.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (match) {
+      const month = parseInt(match[1], 10);
+      const day = parseInt(match[2], 10);
+      const year = parseInt(match[3], 10);
+      const tempDate = new Date(year, month - 1, day);
+      // Verify no rollover (e.g., input wasn't 2/30/2024).
+      if (tempDate.getFullYear() === year && tempDate.getMonth() === month - 1 && tempDate.getDate() === day) {
+        date = tempDate;
+      }
+    } else {
+      // Case 2: YYYY-MM-DD or YYYY/MM/DD
+      match = trimmedInput.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+      if (match) {
+        const year = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10);
+        const day = parseInt(match[3], 10);
+        const tempDate = new Date(year, month - 1, day);
+        // Verify no rollover.
+        if (tempDate.getFullYear() === year && tempDate.getMonth() === month - 1 && tempDate.getDate() === day) {
+          date = tempDate;
+        }
+      }
     }
 
-    // B. Use strict regex to ensure the string is in a common date format and nothing else.
-    // This prevents parsing "Project 5/10/2024" as a date.
-    const isDateString = /^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(trimmedInput) || /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(trimmedInput);
-
-    if (isDateString) {
-      const date = new Date(trimmedInput);
-      // C. Verify the parsed date is valid (e.g., not "2/30/2024").
-      if (date && !isNaN(date.getTime())) {
-        date.setHours(0, 0, 0, 0);
-        return date;
-      }
+    // C. If a valid date was constructed, normalize and return it.
+    if (date && !isNaN(date.getTime())) {
+      date.setHours(0, 0, 0, 0);
+      return date;
     }
   }
 
@@ -118,24 +137,24 @@ function parseAndNormalizeDate(input) {
 }
 
 /**
- * Formats a value for use in creating unique string-based keys.
+ * Formats a value for use in creating unique string-based keys, a core part of the `TransferEngine`'s duplicate checking mechanism.
  * It handles Date objects and other values differently to ensure consistent comparisons:
- * - **Actual `Date` objects** are formatted as a consistent `"yyyy-MM-dd"` string.
- * - All other values (including strings that may look like dates) are normalized to a lowercased, trimmed string.
+ * - Date objects and recognizable date strings are formatted as `"yyyy-MM-dd"`.
+ * - All other values are normalized to a lowercased, trimmed string.
  *
  * @param {any} value The value to format.
  * @returns {string} The formatted string, ready for use as a key.
  */
 function formatValueForKey(value) {
-  // Only format actual Date objects. This prevents misinterpreting date-like strings.
-  if (value instanceof Date) {
-    const parsedDate = parseAndNormalizeDate(value);
-    if (parsedDate) {
-      return Utilities.formatDate(parsedDate, "UTC", "yyyy-MM-dd");
-    }
+  // First, try to parse the value as a date. This handles both actual Date objects
+  // and common date-string formats from the spreadsheet.
+  const parsedDate = parseAndNormalizeDate(value);
+  if (parsedDate) {
+    // If it's a valid date, format it consistently.
+    return Utilities.formatDate(parsedDate, "UTC", "yyyy-MM-dd");
   }
-  // All other values are treated as simple strings.
-  return normalizeString(value);
+  // If it's not a date, fall back to the standard string normalization.
+  return (value !== null && value !== undefined) ? String(value).trim().toLowerCase() : "";
 }
 
 /**
