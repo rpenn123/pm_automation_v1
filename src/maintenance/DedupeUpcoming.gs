@@ -35,7 +35,7 @@ function dedupeUpcomingBySfidOrNameLoc() {
     if (list.length <= 1) continue;
     list.sort((a, b) => {
       if (b.ts !== a.ts) return b.ts - a.ts; // newest ts first
-      return a.idx - b.idx; // tie: later rows considered newer → keep last; delete earlier
+      return b.idx - a.idx; // tie: later rows considered newer → keep last; delete earlier
     });
     // Keep list[0], delete the rest
     for (let i = 1; i < list.length; i++) toDelete.push(list[i].idx);
