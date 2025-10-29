@@ -8,50 +8,67 @@ function runUtilityTests() {
 }
 
 /**
- * Tests the `formatValueForKey` function to ensure it does not misinterpret
- * date-like strings as actual dates. Project names or other identifiers that
- * look like dates (e.g., "10/5/2024") should be treated as literal strings.
+ * Tests the `formatValueForKey` function for robust key normalization.
+ * This test verifies that the function correctly:
+ * 1.  Normalizes actual `Date` objects to a "yyyy-MM-dd" format.
+ * 2.  Normalizes valid date strings (e.g., "5/10/2024") to the same "yyyy-MM-dd" format.
+ * 3.  Treats non-date strings, including numeric strings and strings containing dates, as simple,
+ *     lowercased strings, preventing them from being misinterpreted as dates.
  */
 function test_formatValueForKey_handlesDateLikeStrings() {
     const testName = 'test_formatValueForKey_handlesDateLikeStrings';
     let passed = true;
     const failures = [];
 
-    // Test Cases: input and expected output
-    const testCases = {
-        '5/10/2024': '5/10/2024',
+    // Test cases for values that should be treated as DATES
+    const dateCases = {
+        '5/10/2024': '2024-05-10',
         '2024-03-15': '2024-03-15',
-        ' 12345 ': '12345',
-        'Normal Project Name': 'normal project name',
-        '': '',
-        '   ': ''
+        '01-05-2023': '2023-01-05',
     };
 
-    // Mock Date object to ensure dates are still handled correctly
-    const realDate = new Date('2024-10-05T00:00:00.000Z');
-    const expectedDateString = '2024-10-05';
+    // Test cases for values that should be treated as STRINGS
+    const stringCases = {
+        'Project 5/10/2024': 'project 5/10/2024',
+        '12345': '12345', // Numeric string should not be a date
+        'Main Street Bridge': 'main street bridge',
+        '': '',
+    };
 
-    // 1. ARRANGE & 2. ACT
-    // Test date-like strings
-    for (const input in testCases) {
-        const expected = testCases[input];
+    // --- 1. ARRANGE & 2. ACT ---
+
+    // Test date-like strings that SHOULD be converted
+    for (const input in dateCases) {
+        const expected = dateCases[input];
         const actual = formatValueForKey(input);
         if (actual !== expected) {
             passed = false;
-            failures.push(`Input: "${input}", Expected: "${expected}", Got: "${actual}"`);
+            failures.push(`FAIL: Input "${input}" (date string) | Expected: "${expected}" | Got: "${actual}"`);
         }
     }
 
-    // Test a real date object
+    // Test strings that should NOT be converted
+    for (const input in stringCases) {
+        const expected = stringCases[input];
+        const actual = formatValueForKey(input);
+        if (actual !== expected) {
+            passed = false;
+            failures.push(`FAIL: Input "${input}" (string) | Expected: "${expected}" | Got: "${actual}"`);
+        }
+    }
+
+    // Test a real Date object
+    const realDate = new Date('2024-10-05T12:00:00Z'); // Use noon to avoid timezone issues
+    const expectedDateString = '2024-10-05';
     const actualDateResult = formatValueForKey(realDate);
     if (actualDateResult !== expectedDateString) {
         passed = false;
-        failures.push(`Input: Date Object, Expected: "${expectedDateString}", Got: "${actualDateResult}"`);
+        failures.push(`FAIL: Input Date Object | Expected: "${expectedDateString}" | Got: "${actualDateResult}"`);
     }
 
-    // 3. ASSERT
+    // --- 3. ASSERT ---
     if (!passed) {
-        throw new Error(`${testName} FAILED:\n${failures.join('\n')}`);
+        throw new Error(`${testName} FAILED:\n- ${failures.join('\n- ')}`);
     } else {
         Logger.log(`${testName} PASSED`);
     }

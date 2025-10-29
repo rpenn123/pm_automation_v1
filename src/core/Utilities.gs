@@ -83,34 +83,26 @@ function parseAndNormalizeDate(input) {
     return date;
   }
 
-  // 2. If it's a string, attempt to parse common formats, but avoid purely numeric strings.
+  // 2. If it's a string, strictly validate and parse it.
   if (typeof input === 'string') {
     const trimmedInput = input.trim();
 
-    // **Bug Fix**: If the string consists only of digits, do not treat it as a date.
-    // This prevents numeric project names (e.g., "12345") from being parsed as a
-    // millisecond timestamp, which would result in a date in 1970.
+    // A. Ignore purely numeric strings to avoid misinterpreting IDs as dates.
     if (/^\d+$/.test(trimmedInput)) {
-        return null;
+      return null;
     }
 
-    let date;
+    // B. Use strict regex to ensure the string is in a common date format and nothing else.
+    // This prevents parsing "Project 5/10/2024" as a date.
+    const isDateString = /^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(trimmedInput) || /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(trimmedInput);
 
-    // Try to parse YYYY-MM-DD or YYYY/MM/DD format (handles ISO-like dates)
-    const isoMatch = trimmedInput.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (isoMatch) {
-      const year = parseInt(isoMatch[1], 10);
-      const month = parseInt(isoMatch[2], 10);
-      const day = parseInt(isoMatch[3], 10);
-      date = new Date(year, month - 1, day);
-    } else {
-      // Fallback for other formats recognized by the native parser, like MM/DD/YYYY.
-      date = new Date(trimmedInput);
-    }
-
-    if (date && !isNaN(date.getTime())) {
-      date.setHours(0, 0, 0, 0);
-      return date;
+    if (isDateString) {
+      const date = new Date(trimmedInput);
+      // C. Verify the parsed date is valid (e.g., not "2/30/2024").
+      if (date && !isNaN(date.getTime())) {
+        date.setHours(0, 0, 0, 0);
+        return date;
+      }
     }
   }
 
