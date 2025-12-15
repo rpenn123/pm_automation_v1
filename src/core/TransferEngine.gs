@@ -249,12 +249,21 @@ function isDuplicateInDestination(destinationSheet, sfid, projectName, sourceRow
   const projIdx = destProjectNameCol - minCol;
 
   // 4. Scan destination data for the key
+  // OPTIMIZATION: Project Name is the first part of the compound key.
+  // We can extract it from keyToCheck once (it's the prefix) or just compare the first part.
+  const targetProjectName = normalizeString(projectName);
+
   for (const row of vals) {
     if (projIdx >= row.length) continue;
-    let existingKey = normalizeString(row[projIdx]);
-    if (!existingKey) continue;
+    let currentProjectName = normalizeString(row[projIdx]);
 
-    // Build the key from the destination row using the same sorted order
+    // Fast fail: if project name doesn't match, the compound key won't match.
+    if (currentProjectName !== targetProjectName) continue;
+
+    // Project name matches, so start building the key with it.
+    let existingKey = currentProjectName;
+
+    // Build the rest of the key from the destination row
     for (const pair of keyPairs) {
       const destColIndex = pair.dest - minCol;
       const v = (destColIndex < row.length) ? row[destColIndex] : "";
@@ -340,13 +349,21 @@ function findDuplicateRow(destinationSheet, sfid, projectName, sourceRowData, so
   const projIdx = destProjectNameCol - minCol;
 
   // 4. Scan destination data for the key
+  // OPTIMIZATION: Project Name is the first part of the compound key.
+  const targetProjectName = normalizeString(projectName);
+
   for (let i = 0; i < vals.length; i++) {
     const row = vals[i];
     if (projIdx >= row.length) continue;
-    let existingKey = normalizeString(row[projIdx]);
-    if (!existingKey) continue;
+    let currentProjectName = normalizeString(row[projIdx]);
 
-    // Build the key from the destination row using the same sorted order
+    // Fast fail: if project name doesn't match, the compound key won't match.
+    if (currentProjectName !== targetProjectName) continue;
+
+    // Project name matches, so start building the key with it.
+    let existingKey = currentProjectName;
+
+    // Build the rest of the key from the destination row
     for (const pair of keyPairs) {
       const destColIndex = pair.dest - minCol;
       const v = (destColIndex < row.length) ? row[destColIndex] : "";
