@@ -307,7 +307,6 @@ try {
     runSuite('Upcoming Fallback Compound Key', () => global.run_test_upcoming_fallback_compound_key && run_test_upcoming_fallback_compound_key());
     runSuite('Update Row Non-Destructive', () => global.run_test_update_row_non_destructive && run_test_update_row_non_destructive());
     runSuite('Bugfix', () => global.runBugfixTests && runBugfixTests());
-
     console.log("\nTest execution finished successfully.");
 } catch (e) {
     console.error("\nTest failed:", e.message);

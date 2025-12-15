@@ -169,7 +169,7 @@ function syncProgressToUpcoming(sfid, projectName, newValue, ss, eCtx, config, c
 
   try {
     withRetry(() => {
-      lockAcquired = lock.tryLock(1000);
+      lockAcquired = lock.tryLock(30000);
       if (!lockAcquired) throw new Error("Lock not acquired for sync.");
     }, { functionName: `${actionName}:acquireLock`, correlationId: correlationId });
 
@@ -222,7 +222,7 @@ function syncProgressToForecasting(sfid, projectName, newValue, ss, eCtx, config
 
   try {
     withRetry(() => {
-      lockAcquired = lock.tryLock(1000);
+      lockAcquired = lock.tryLock(30000);
       if (!lockAcquired) throw new Error("Lock not acquired for sync.");
     }, { functionName: `${actionName}:acquireLock`, correlationId: correlationId });
 
