@@ -49,7 +49,7 @@ function executeTransfer(e, config, preReadSourceRowData, correlationId) {
 
   try {
     withRetry(() => {
-      lockAcquired = lock.tryLock(2500);
+      lockAcquired = lock.tryLock(30000);
       if (!lockAcquired) throw new Error("Lock not acquired within the time limit.");
     }, { functionName: `${config.transferName}:acquireLock`, maxRetries: 2, initialDelayMs: 500 });
 
